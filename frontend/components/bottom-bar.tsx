@@ -162,7 +162,7 @@ export function BottomBar({
 
   return (
     <div 
-      className="flex-shrink-0 bg-background/80 backdrop-blur-lg border-t border-border/50 shadow-lg"
+      className="flex-shrink-0 bg-background/80 backdrop-blur-lg shadow-lg"
       role="region"
       aria-label="Query input area"
     >

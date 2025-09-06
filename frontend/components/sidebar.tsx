@@ -99,12 +99,12 @@ export default function Sidebar({ sidebarOpen, onNewChat }: SidebarProps) {
         <div className="flex items-center gap-3">
           {sidebarOpen ? (
             <>
-              <Scale className="h-5 w-5 text-white flex-shrink-0" />
+              <Scale className="h-5 w-5 text-primary flex-shrink-0" />
               <h1 className="font-semibold text-lg text-sidebar-foreground">OpenJustice</h1>
             </>
           ) : (
             <div className="flex justify-center w-full">
-              <Scale className="h-5 w-5 text-white" />
+              <Scale className="h-5 w-5 text-primary" />
             </div>
           )}
         </div>

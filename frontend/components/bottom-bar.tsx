@@ -13,6 +13,8 @@ interface UploadedFile {
   type: string
   size: string
   uploadedAt: Date
+  isUploading?: boolean
+  uploadProgress?: number
   isTranscribing?: boolean
   transcriptionProgress?: number
 }
@@ -127,27 +129,31 @@ export function BottomBar({
     return fileType === "audio" || fileType === "video"
   }
 
-  const getFileIcon = (type: string, isTranscribing?: boolean) => {
+  const getFileIcon = (type: string, isUploading?: boolean, isTranscribing?: boolean) => {
     switch (type) {
       case "pdf":
         return <span className="text-xs">📄</span>
       case "audio":
-        if (isTranscribing) {
+        if (isUploading || isTranscribing) {
           return (
             <div className="relative h-4 w-4">
               <div className="absolute inset-0 animate-spin">
-                <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                <div className={`h-4 w-4 border-2 border-current border-t-transparent rounded-full ${
+                  isUploading ? 'animate-spin' : 'animate-pulse'
+                }`} />
               </div>
             </div>
           )
         }
         return <span className="text-xs">🎵</span>
       case "video":
-        if (isTranscribing) {
+        if (isUploading || isTranscribing) {
           return (
             <div className="relative h-4 w-4">
               <div className="absolute inset-0 animate-spin">
-                <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                <div className={`h-4 w-4 border-2 border-current border-t-transparent rounded-full ${
+                  isUploading ? 'animate-spin' : 'animate-pulse'
+                }`} />
               </div>
             </div>
           )
@@ -174,22 +180,46 @@ export function BottomBar({
                 <Badge
                   key={file.id}
                   variant="secondary"
-                  className={`flex items-center gap-1 px-1.5 py-0.5 text-xs transition-colors ${
-                    isTranscribableFile(file.type)
+                  className={`flex items-center gap-1 px-1.5 py-0.5 text-xs transition-all duration-300 ${
+                    file.isUploading
+                      ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-300/50 backdrop-blur-sm"
+                      : isTranscribableFile(file.type)
                       ? file.isTranscribing
-                        ? "bg-slate-600/60 hover:bg-slate-600/70 text-slate-200 backdrop-blur-sm"
+                        ? "bg-blue-500/20 hover:bg-blue-500/30 text-blue-700 dark:text-blue-300 border border-blue-300/50 backdrop-blur-sm animate-pulse"
+                        : file.transcriptionProgress === 100
+                        ? "bg-green-500/20 hover:bg-green-500/30 text-green-700 dark:text-green-300 border border-green-300/50 backdrop-blur-sm"
                         : "bg-slate-500/40 hover:bg-slate-500/50 text-slate-300 backdrop-blur-sm"
                       : "bg-muted/40 hover:bg-muted/60 backdrop-blur-sm"
                   }`}
                 >
-                  {getFileIcon(file.type, file.isTranscribing)}
+                  <div className="relative">
+                    {getFileIcon(file.type, file.isUploading, file.isTranscribing)}
+                    {(file.isUploading || file.isTranscribing) && (
+                      <div className={`absolute -bottom-1 -right-1 h-2 w-2 rounded-full animate-ping ${
+                        file.isUploading ? 'bg-amber-500' : 'bg-blue-500'
+                      }`} />
+                    )}
+                  </div>
                   <span className="max-w-[80px] truncate">{file.name}</span>
-                  <span className="text-muted-foreground/70 text-xs">{file.size}</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground/70 text-xs">{file.size}</span>
+                    {file.isUploading && file.uploadProgress !== undefined && (
+                      <span className="text-xs font-mono text-amber-600 dark:text-amber-400">
+                        {file.uploadProgress}%
+                      </span>
+                    )}
+                    {file.isTranscribing && file.transcriptionProgress !== undefined && (
+                      <span className="text-xs font-mono text-blue-600 dark:text-blue-400">
+                        {file.transcriptionProgress}%
+                      </span>
+                    )}
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => onRemoveFile(file.id)}
                     className="h-3 w-3 p-0 text-muted-foreground/60 hover:text-destructive ml-0.5"
+                    disabled={file.isUploading || file.isTranscribing}
                   >
                     <X className="h-2 w-2" />
                   </Button>

@@ -11,6 +11,7 @@ export interface UploadedFile {
   isTranscribing?: boolean
   transcriptionProgress?: number
   path?: string
+  transcript?: string
 }
 
 export interface ExtractedQuery {

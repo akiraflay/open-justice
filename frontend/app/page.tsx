@@ -46,6 +46,8 @@ interface UploadedFile {
   type: string
   size: string
   uploadedAt: Date
+  isUploading?: boolean
+  uploadProgress?: number
   isTranscribing?: boolean
   transcriptionProgress?: number
 }
@@ -419,48 +421,131 @@ const LegalCaseAnalysis = () => {
         fileType = "pdf"
       } else if (["jpg", "jpeg", "png", "gif", "bmp", "webp"].includes(extension || "")) {
         fileType = "image"
-      } else if (["mp4", "avi", "webm", "mpv", "ogg"].includes(extension || "")) {
+      } else if (["mp4", "avi", "webm", "mov", "mkv"].includes(extension || "")) {
         fileType = "video"
-      } else if (["wav", "mp3", "flac", "aiff", "aac"].includes(extension || "")) {
+      } else if (["wav", "mp3", "flac", "aiff", "aac", "m4a", "ogg", "wma"].includes(extension || "")) {
         fileType = "audio"
       }
 
+      // Generate temporary ID for UI before upload
+      const tempFileId = `temp-${Math.random().toString(36).substr(2, 9)}`
+      
+      // Add file to UI immediately with uploading state
+      const tempFile: UploadedFile = {
+        id: tempFileId,
+        name: file.name,
+        size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+        type: fileType,
+        uploadedAt: new Date(),
+        isUploading: true,
+        uploadProgress: 0,
+        isTranscribing: false,
+        transcriptionProgress: undefined,
+      }
+
+      setUploadedFiles((prev) => [...prev, tempFile])
+
       try {
+        // Show uploading status with transcription note for audio/video
+        if (isTranscribableFile(fileType)) {
+          toast({
+            title: "Processing file",
+            description: `Uploading ${file.name} and will transcribe audio...`,
+          })
+        }
+
+        // Simulate upload progress
+        let uploadProgress = 0
+        const uploadProgressInterval = setInterval(() => {
+          uploadProgress += Math.random() * 20 + 10
+          if (uploadProgress >= 90) {
+            uploadProgress = 90 // Cap at 90% until actual upload completes
+            clearInterval(uploadProgressInterval)
+          }
+          setUploadedFiles((prev) =>
+            prev.map((f) => 
+              f.id === tempFileId 
+                ? { ...f, uploadProgress: Math.round(uploadProgress) } 
+                : f
+            ),
+          )
+        }, 300)
+
         // Upload file to backend
         const response = await uploadFileAPI(file)
         
+        clearInterval(uploadProgressInterval)
+        
         if (response.success && response.file) {
-          const newFile: UploadedFile = {
-            id: response.file.id,
-            name: response.file.name,
-            size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-            type: fileType,
-            uploadedAt: new Date(response.file.uploadedAt),
-            isTranscribing: isTranscribableFile(fileType),
-            transcriptionProgress: isTranscribableFile(fileType) ? 0 : undefined,
-          }
+          // Update the temporary file with real server data
+          setUploadedFiles((prev) =>
+            prev.map((f) => 
+              f.id === tempFileId 
+                ? {
+                    ...f,
+                    id: response.file.id,
+                    uploadedAt: new Date(response.file.uploadedAt),
+                    isUploading: false,
+                    uploadProgress: 100,
+                    // For transcribable files, start transcribing unless already complete
+                    isTranscribing: isTranscribableFile(fileType) && !response.file.transcript,
+                    transcriptionProgress: isTranscribableFile(fileType) 
+                      ? (response.file.transcript ? 100 : 10) 
+                      : undefined,
+                  }
+                : f
+            ),
+          )
 
-          setUploadedFiles((prev) => [...prev, newFile])
-
-          // Keep mock transcription animation for now
+          // Handle transcription status
+          const actualFileId = response.file.id
           if (isTranscribableFile(fileType)) {
-            let progress = 0
-            const transcriptionTimer = setInterval(() => {
-              progress += Math.random() * 15 + 5
-
-              if (progress >= 100) {
-                progress = 100
-                clearInterval(transcriptionTimer)
-
-                setUploadedFiles((prev) =>
-                  prev.map((f) => (f.id === newFile.id ? { ...f, isTranscribing: false, transcriptionProgress: 100 } : f)),
-                )
-              } else {
-                setUploadedFiles((prev) =>
-                  prev.map((f) => (f.id === newFile.id ? { ...f, transcriptionProgress: progress } : f)),
-                )
-              }
-            }, 200)
+            if (response.file.transcript) {
+              // Transcription was completed during upload
+              toast({
+                title: "Transcription complete",
+                description: `Audio from ${file.name} has been transcribed and is ready for analysis.`,
+              })
+            } else {
+              // Transcription is still in progress - keep file visible with processing indicator
+              toast({
+                title: "Processing audio", 
+                description: `Transcribing ${file.name}... File will remain visible while processing.`,
+              })
+              
+              // Simulate progress updates for demo purposes
+              // In a real app, you'd poll the backend or use WebSocket updates
+              let progress = 10
+              const progressInterval = setInterval(() => {
+                progress += Math.random() * 15 + 5
+                if (progress >= 100) {
+                  progress = 100
+                  clearInterval(progressInterval)
+                  
+                  // Mark transcription as complete
+                  setUploadedFiles((prev) =>
+                    prev.map((f) => 
+                      f.id === actualFileId 
+                        ? { ...f, isTranscribing: false, transcriptionProgress: 100 } 
+                        : f
+                    ),
+                  )
+                  
+                  toast({
+                    title: "Transcription complete",
+                    description: `Audio from ${file.name} has been processed and is ready for analysis.`,
+                  })
+                } else {
+                  setUploadedFiles((prev) =>
+                    prev.map((f) => 
+                      f.id === actualFileId 
+                        ? { ...f, transcriptionProgress: Math.round(progress) } 
+                        : f
+                    ),
+                  )
+                }
+              }, 500)
+            }
           }
 
           toast({
@@ -471,7 +556,12 @@ const LegalCaseAnalysis = () => {
           throw new Error(response.error || "Upload failed")
         }
       } catch (error) {
+        clearInterval(uploadProgressInterval)
         console.error('Upload error:', error)
+        
+        // Remove the failed file from UI
+        setUploadedFiles((prev) => prev.filter((f) => f.id !== tempFileId))
+        
         toast({
           title: "Upload failed",
           description: `Failed to upload ${file.name}. Please try again.`,
@@ -479,8 +569,6 @@ const LegalCaseAnalysis = () => {
         })
       }
     }
-
-    event.target.value = ""
   }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {

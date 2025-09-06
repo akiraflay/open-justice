@@ -10,8 +10,8 @@ class FileHandler:
     ALLOWED_EXTENSIONS = {
         'pdf', 'txt', 'doc', 'docx',  # Documents
         'png', 'jpg', 'jpeg', 'gif',   # Images
-        'mp3', 'wav', 'm4a', 'ogg',    # Audio
-        'mp4', 'avi', 'mov', 'webm'    # Video
+        'mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'wma',    # Audio
+        'mp4', 'avi', 'mov', 'webm', 'mkv'    # Video
     }
     
     def __init__(self, upload_folder):
@@ -31,9 +31,9 @@ class FileHandler:
             return 'pdf' if ext == 'pdf' else 'document'
         elif ext in ['png', 'jpg', 'jpeg', 'gif']:
             return 'image'
-        elif ext in ['mp3', 'wav', 'm4a', 'ogg']:
+        elif ext in ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'wma']:
             return 'audio'
-        elif ext in ['mp4', 'avi', 'mov', 'webm']:
+        elif ext in ['mp4', 'avi', 'mov', 'webm', 'mkv']:
             return 'video'
         else:
             return 'unknown'

@@ -2,12 +2,14 @@ import PyPDF2
 import io
 import re
 from typing import Optional, List, Dict
+from openai import OpenAI
 
 class DocumentProcessor:
     """Process documents and extract text content"""
     
     def __init__(self):
         self.max_chars_per_page = 10000  # Limit chars per page to avoid memory issues
+        self.openai_client = OpenAI()  # Initialize OpenAI client for Whisper
     
     def extract_pdf_text(self, file_path: str) -> Optional[str]:
         """Extract text from PDF file"""
@@ -47,6 +49,28 @@ class DocumentProcessor:
         
         except Exception as e:
             return f"[Error processing PDF: {str(e)}]"
+    
+    def transcribe_audio(self, file_path: str) -> Optional[str]:
+        """Transcribe audio file using OpenAI Whisper"""
+        try:
+            with open(file_path, "rb") as audio_file:
+                transcript = self.openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="text"
+                )
+            
+            # Clean the transcribed text
+            if isinstance(transcript, str):
+                cleaned_text = self.clean_text(transcript)
+                return f"[Audio Transcript]\n{cleaned_text}"
+            else:
+                # Handle case where transcript is an object with text property
+                cleaned_text = self.clean_text(str(transcript))
+                return f"[Audio Transcript]\n{cleaned_text}"
+        
+        except Exception as e:
+            return f"[Error transcribing audio: {str(e)}]"
     
     def get_pdf_page_count(self, file_path: str) -> int:
         """Get number of pages in PDF"""

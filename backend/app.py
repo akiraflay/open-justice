@@ -108,11 +108,16 @@ def upload_file():
         # Save file
         file_info = file_handler.save_file(file)
         
-        # Process document (extract text if PDF)
+        # Process document (extract text if PDF, transcribe if audio)
         if file_info['type'] == 'pdf':
             text_content = doc_processor.extract_pdf_text(file_info['path'])
             file_info['text_preview'] = text_content[:500] if text_content else None
             file_info['page_count'] = doc_processor.get_pdf_page_count(file_info['path'])
+        elif file_info['type'] in ['audio', 'video']:
+            # Transcribe audio/video files
+            transcript = doc_processor.transcribe_audio(file_info['path'])
+            file_info['text_preview'] = transcript[:500] if transcript else None
+            file_info['transcript'] = transcript
         
         # Update session
         session_data = get_session_data(session_id)
@@ -245,6 +250,14 @@ def process_query():
                         'filename': file['name'],
                         'content': text
                     })
+            elif file['type'] in ['audio', 'video']:
+                # Use stored transcript or transcribe if not available
+                text = file.get('transcript') or doc_processor.transcribe_audio(file['path'])
+                if text:
+                    all_texts.append({
+                        'filename': file['name'],
+                        'content': text
+                    })
         
         # Process query with LLM
         query_id = str(uuid.uuid4())
@@ -311,6 +324,14 @@ def stream_query():
                     for file in session_data['files']:
                         if file['type'] == 'pdf':
                             text = doc_processor.extract_pdf_text(file['path'])
+                            if text:
+                                all_texts.append({
+                                    'filename': file['name'],
+                                    'content': text
+                                })
+                        elif file['type'] in ['audio', 'video']:
+                            # Use stored transcript or transcribe if not available
+                            text = file.get('transcript') or doc_processor.transcribe_audio(file['path'])
                             if text:
                                 all_texts.append({
                                     'filename': file['name'],
@@ -437,6 +458,15 @@ def generate_combined_analysis():
             except Exception as pdf_error:
                 print(f"Error extracting PDF text: {pdf_error}")
                 doc_text = "[Error extracting document text]"
+        elif target_file['type'] in ['audio', 'video']:
+            try:
+                # Use stored transcript or transcribe if not available
+                doc_text = target_file.get('transcript') or doc_processor.transcribe_audio(target_file['path'])
+                if not doc_text or doc_text.strip() == "":
+                    doc_text = "[Audio transcript could not be generated]"
+            except Exception as audio_error:
+                print(f"Error transcribing audio: {audio_error}")
+                doc_text = "[Error transcribing audio file]"
         
         # Validate we have query results to analyze
         # Handle both frontend query structure and backend session structure

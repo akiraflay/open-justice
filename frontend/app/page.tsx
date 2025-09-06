@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 import Sidebar from "@/components/sidebar"
 import { FavoritesModal } from "@/components/favorites-modal"
 import { BottomBar } from "@/components/bottom-bar"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { 
   extractQueries as extractQueriesAPI, 
   uploadFile as uploadFileAPI,
@@ -96,6 +97,8 @@ const LegalCaseAnalysis = () => {
   const [extractedQueries, setExtractedQueries] = useState<ExtractedQuery[]>([])
   const [displayedText, setDisplayedText] = useState("")
   const [recordingState, setRecordingState] = useState<RecordingState>("idle")
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragCounter, setDragCounter] = useState(0)
   const [swappingQueries, setSwappingQueries] = useState<Set<string>>(new Set())
   const [swappedQueries, setSwappedQueries] = useState<Set<string>>(new Set())
   const [previousQueries, setPreviousQueries] = useState<Map<string, string>>(new Map())
@@ -106,6 +109,7 @@ const LegalCaseAnalysis = () => {
   const [previousInputs, setPreviousInputs] = useState<Map<string, string>>(new Map())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
   const [processingSourceIds, setProcessingSourceIds] = useState<Set<string>>(new Set())
@@ -185,7 +189,10 @@ const LegalCaseAnalysis = () => {
   const ProcessingBar: React.FC<{ progress: number; status: string; message?: string; attempt?: string; isRetrying?: boolean }> = ({ progress, status, message, attempt, isRetrying }) => {
     if (status === "pending") return (
       <div className="flex items-center gap-2 ml-auto">
-        <span className="text-xs text-muted-foreground">Queued for analysis...</span>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-pulse" />
+          <span className="text-caption animate-pulse">Queued for analysis...</span>
+        </div>
       </div>
     )
     
@@ -213,12 +220,18 @@ const LegalCaseAnalysis = () => {
             {isHallucinationMode && attempt && (
               <span className="text-xs font-mono text-amber-600">{attempt}</span>
             )}
-            <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
+            <div className="w-20 h-2 bg-muted/30 rounded-full overflow-hidden relative">
               <div 
-                className={`h-full transition-all duration-500 ease-out ${
-                  isHallucinationMode ? 'bg-amber-500' : 'bg-primary'
+                className={`h-full transition-all duration-700 ease-out relative ${
+                  isHallucinationMode ? 'bg-gradient-to-r from-amber-400 to-amber-600' : 'bg-gradient-to-r from-primary/80 to-primary'
                 }`} 
-                style={{ width: `${displayProgress}%` }} 
+                style={{ width: `${displayProgress}%` }}
+              >
+                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+              </div>
+              {/* Shimmer effect */}
+              <div 
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-100%] animate-[shimmer_1.5s_infinite]"
               />
             </div>
             <span className={`text-xs font-mono min-w-[32px] ${
@@ -234,11 +247,20 @@ const LegalCaseAnalysis = () => {
 
   const CombinedAnalysisBar: React.FC<{ progress: number }> = ({ progress }) => {
     return (
-      <div className="flex items-center gap-2">
-        <div className="w-24 h-1 bg-muted rounded-full overflow-hidden">
-          <div className="h-full bg-primary transition-all duration-300 ease-out" style={{ width: `${progress}%` }} />
+      <div className="flex items-center gap-3">
+        <div className="w-32 h-2 bg-primary/20 rounded-full overflow-hidden relative">
+          <div 
+            className="h-full bg-gradient-to-r from-primary/80 to-primary transition-all duration-500 ease-out relative" 
+            style={{ width: `${progress}%` }}
+          >
+            <div className="absolute inset-0 bg-white/20 animate-pulse" />
+          </div>
+          {/* Shimmer effect */}
+          <div 
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-100%] animate-[shimmer_1.5s_infinite]"
+          />
         </div>
-        <span className="text-xs text-muted-foreground font-mono min-w-[32px]">{progress}%</span>
+        <span className="text-caption font-mono min-w-[32px] text-primary">{progress}%</span>
       </div>
     )
   }
@@ -340,11 +362,42 @@ const LegalCaseAnalysis = () => {
     loadSession()
   }, [])
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (!files) return
+  // Enhanced drag and drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragCounter(prev => prev + 1)
+    setIsDragging(true)
+  }
 
-    for (const file of Array.from(files)) {
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragCounter(prev => prev - 1)
+    if (dragCounter <= 1) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    setDragCounter(0)
+    
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      processFiles(Array.from(files))
+    }
+  }
+
+  const processFiles = async (files: File[]) => {
+    for (const file of files) {
       const isDuplicate = uploadedFiles.some(
         (existingFile) =>
           existingFile.name === file.name && existingFile.size === `${(file.size / 1024 / 1024).toFixed(1)} MB`,
@@ -427,6 +480,14 @@ const LegalCaseAnalysis = () => {
       }
     }
 
+    event.target.value = ""
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files) return
+    
+    await processFiles(Array.from(files))
     event.target.value = ""
   }
 
@@ -1219,33 +1280,65 @@ const LegalCaseAnalysis = () => {
               variant="ghost"
               size="sm"
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground focus-ring"
+              aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
             >
               {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </Button>
-            <h1 className="text-lg font-semibold text-balance">{displayedText}</h1>
+            <h1 className="text-hierarchy-3 text-balance transition-opacity duration-300">{displayedText}</h1>
           </div>
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Files
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => fileInputRef.current?.click()}
+              className="interactive-scale focus-ring"
+              aria-label="Add files to analyze"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Files
+            </Button>
+          </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0">
+        <div 
+          ref={dropZoneRef}
+          className="flex-1 flex flex-col min-h-0 relative"
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          role="main"
+          aria-label="Main content area for legal case analysis"
+        >
           {uploadedFiles.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center p-8">
+              <div className="flex-1 flex items-center justify-center p-8 relative">
                 <Card
-                  className="w-full max-w-md p-8 text-center border-dashed border-2 hover:border-primary/50 transition-colors cursor-pointer"
+                  className={`w-full max-w-md p-8 text-center border-dashed border-2 transition-all duration-300 cursor-pointer interactive-lift group ${
+                    isDragging 
+                      ? 'border-primary bg-primary/10 scale-105 shadow-lg' 
+                      : 'hover:border-primary/50'
+                  }`}
                   onClick={() => fileInputRef.current?.click()}
+                  role="button"
+                  aria-label="Upload case files - click to select files or drag and drop"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      fileInputRef.current?.click()
+                    }
+                  }}
                 >
                   <div className="mb-4">
-                    <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Upload Case Files</h3>
-                    <p className="text-muted-foreground text-sm text-pretty">
+                    <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4 transition-transform duration-300 group-hover:scale-110" />
+                    <h3 className="text-hierarchy-3 mb-2">Upload Case Files</h3>
+                    <p className="text-body text-pretty">
                       Upload files (PDFs, audio, video) to begin analysis.
                     </p>
-                    <p className="text-muted-foreground text-sm text-pretty mt-1">
-                      All files are processed locally for security.
+                    <p className="text-caption mt-1">
+                      {isDragging ? 'Drop your files here!' : 'All files are processed locally for security.'}
                     </p>
                   </div>
                   <Button
@@ -1253,7 +1346,7 @@ const LegalCaseAnalysis = () => {
                       e.stopPropagation()
                       fileInputRef.current?.click()
                     }}
-                    className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90 border-0"
+                    className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90 border-0 interactive-glow focus-ring"
                     size="lg"
                   >
                     <Plus className="h-5 w-5 mr-2" />
@@ -1274,9 +1367,9 @@ const LegalCaseAnalysis = () => {
                 {queries.length === 0 ? (
                   <div className="flex-1 flex items-start justify-center pt-16 p-8">
                     <div className="text-center max-w-md">
-                      <Search className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">Ready to Analyze</h3>
-                      <p className="text-muted-foreground text-sm text-pretty">
+                      <Search className="h-16 w-16 mx-auto text-muted-foreground mb-4 animate-pulse" />
+                      <h3 className="text-hierarchy-3 mb-2">Ready to Analyze</h3>
+                      <p className="text-body text-pretty">
                         Your files have been uploaded. Ask questions about your case files using the query box below.
                       </p>
                     </div>
@@ -1319,7 +1412,7 @@ const LegalCaseAnalysis = () => {
                             {groupedQueries[sessionId].map((query) => (
                               <div key={query.id} className="space-y-2.5 mb-4">
                                 <div 
-                                  className="flex items-center gap-2 mb-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                  className="flex items-center gap-2 mb-3 cursor-pointer hover:opacity-80 transition-all duration-200 p-2 -m-2 rounded-lg hover:bg-muted/30 interactive-scale focus-ring"
                                   onClick={() => {
                                     const newExpanded = new Set(expandedQueries)
                                     if (newExpanded.has(query.id)) {
@@ -1329,9 +1422,25 @@ const LegalCaseAnalysis = () => {
                                     }
                                     setExpandedQueries(newExpanded)
                                   }}
+                                  role="button"
+                                  aria-expanded={expandedQueries.has(query.id)}
+                                  aria-label={`${expandedQueries.has(query.id) ? 'Collapse' : 'Expand'} query: ${query.text}`}
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      const newExpanded = new Set(expandedQueries)
+                                      if (newExpanded.has(query.id)) {
+                                        newExpanded.delete(query.id)
+                                      } else {
+                                        newExpanded.add(query.id)
+                                      }
+                                      setExpandedQueries(newExpanded)
+                                    }
+                                  }}
                                 >
-                                  <Search className="h-4 w-4 text-primary" />
-                                  <h3 className="text-sm font-semibold flex-1">{query.text}</h3>
+                                  <Search className="h-4 w-4 text-primary transition-transform duration-200" />
+                                  <h3 className="text-hierarchy-4 flex-1 pr-2">{query.text}</h3>
                                   {expandedQueries.has(query.id) ? (
                                     <ChevronUp className="h-4 w-4 text-muted-foreground" />
                                   ) : (
@@ -1340,11 +1449,11 @@ const LegalCaseAnalysis = () => {
                                 </div>
 
                                 {expandedQueries.has(query.id) && (
-                                  <div className="space-y-1.5">
+                                  <div className="space-y-1.5" role="region" aria-label="Query results">
                                   {query.fileResults?.map((fileResult) => (
                                     <Card 
                                       key={fileResult.fileId} 
-                                      className={`p-2.5 transition-colors duration-300 ${
+                                      className={`p-3 transition-all duration-300 hover:shadow-md ${
                                         fileResult.status === "anti-hallucination" || fileResult.status === "retrying" 
                                           ? "bg-amber-50 border-amber-200" 
                                           : ""
@@ -1357,34 +1466,34 @@ const LegalCaseAnalysis = () => {
                                           uploadedFiles.find((f) => f.id === fileResult.fileId)?.transcriptionProgress,
                                         )}
                                         <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2 mb-0.5">
-                                            <h4 className="font-medium text-xs truncate">{fileResult.fileName}</h4>
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <h4 className="text-hierarchy-4 truncate">{fileResult.fileName}</h4>
                                             <Badge variant="outline" className="text-xs px-1 py-0">
                                               {uploadedFiles.find((f) => f.id === fileResult.fileId)?.size}
                                             </Badge>
                                           </div>
 
                                           {fileResult.status === "pending" && (
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                              <div className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-pulse"></div>
-                                              <span className="text-xs">Queued for analysis...</span>
+                                            <div className="flex items-center gap-2 text-muted-foreground py-1">
+                                              <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-pulse"></div>
+                                              <span className="text-caption">Queued for analysis...</span>
                                             </div>
                                           )}
 
                                           {fileResult.status === "processing" && (
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                              <div className="flex gap-0.5">
-                                                <div className="w-1.5 h-1.5 bg-muted-foreground/60 rounded-full animate-bounce"></div>
+                                            <div className="flex items-center gap-3 text-muted-foreground py-1">
+                                              <div className="flex gap-1">
+                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
                                                 <div
-                                                  className="w-1.5 h-1.5 bg-muted-foreground/60 rounded-full animate-bounce"
+                                                  className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
                                                   style={{ animationDelay: "0.1s" }}
                                                 ></div>
                                                 <div
-                                                  className="w-1.5 h-1.5 bg-muted-foreground/60 rounded-full animate-bounce"
+                                                  className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
                                                   style={{ animationDelay: "0.2s" }}
                                                 ></div>
                                               </div>
-                                              <span className="text-xs">Analyzing document...</span>
+                                              <span className="text-caption">Analyzing document...</span>
                                             </div>
                                           )}
 
@@ -1402,9 +1511,11 @@ const LegalCaseAnalysis = () => {
                                           )}
 
                                           {fileResult.status === "completed" && (
-                                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                              {fileResult.result}
-                                            </p>
+                                            <div className="mt-2 p-3 bg-muted/20 rounded-md border-l-2 border-primary/50">
+                                              <p className="text-body leading-relaxed">
+                                                {fileResult.result}
+                                              </p>
+                                            </div>
                                           )}
                                         </div>
 
@@ -1431,12 +1542,12 @@ const LegalCaseAnalysis = () => {
                       {getSourceAnalysisData().map((sourceData) => (
                         <div key={sourceData.fileId}>
                           {sourceData.queries.some((q) => q.combinedAnalysisRequested || q.summary) && (
-                            <Card className="p-2.5 bg-primary/5 border-primary/20 mt-2.5">
+                            <Card className="p-3 bg-primary/5 border-primary/20 mt-3 interactive-lift">
                               <div className="flex items-start gap-2">
                                 <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1.5"></div>
                                 <div className="flex-1">
                                   <div className="flex items-center justify-between mb-0.5">
-                                    <h4 className="font-medium text-xs text-primary">
+                                    <h4 className="text-hierarchy-4 text-primary">
                                       Combined Analysis - {sourceData.fileName}
                                     </h4>
                                     {sourceData.queries.some((q) => q.combinedAnalysisRequested && !q.summary) && (
@@ -1554,6 +1665,17 @@ const LegalCaseAnalysis = () => {
             onUndoInputSwap={handleUndoInputSwap}
           />
 
+          {/* Global drag overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 bg-primary/20 backdrop-blur-sm flex items-center justify-center z-50 pointer-events-none">
+              <div className="bg-card/90 backdrop-blur-md border-2 border-dashed border-primary rounded-xl p-8 text-center max-w-md mx-4">
+                <Upload className="h-16 w-16 mx-auto text-primary mb-4 animate-bounce" />
+                <h3 className="text-hierarchy-3 text-primary mb-2">Drop Files Here</h3>
+                <p className="text-body text-primary/80">Release to upload your case files</p>
+              </div>
+            </div>
+          )}
+
           <input
             ref={fileInputRef}
             type="file"
@@ -1561,6 +1683,7 @@ const LegalCaseAnalysis = () => {
             accept=".pdf,audio/*,video/*,image/*"
             onChange={handleFileUpload}
             className="hidden"
+            aria-label="Select case files to upload"
           />
         </div>
       </div>

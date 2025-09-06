@@ -161,7 +161,11 @@ export function BottomBar({
   }
 
   return (
-    <div className="flex-shrink-0 bg-background/70 backdrop-blur-lg">
+    <div 
+      className="flex-shrink-0 bg-background/80 backdrop-blur-lg border-t border-border/50 shadow-lg"
+      role="region"
+      aria-label="Query input area"
+    >
       <div className="p-2.5">
         <div className="max-w-4xl mx-auto">
           <div className="mb-1.5">
@@ -195,7 +199,7 @@ export function BottomBar({
                 variant="ghost"
                 size="sm"
                 onClick={onAddFile}
-                className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-muted-foreground/30 rounded-md backdrop-blur-sm bg-background/30"
+                className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-muted-foreground/30 rounded-md backdrop-blur-sm bg-background/30 interactive-scale focus-ring"
               >
                 <Plus className="h-2.5 w-2.5 mr-0.5" />
                 Add
@@ -204,24 +208,28 @@ export function BottomBar({
           </div>
 
           {queryState === "extracted" ? (
-            <div className="bg-card/80 backdrop-blur-md border border-border/50 rounded-xl shadow-sm">
+            <div className="bg-card/90 backdrop-blur-md border border-border/50 rounded-xl shadow-lg interactive-lift">
               <div className="p-3">
                 <div className="mb-3">
-                  <h3 className="text-sm font-semibold mb-1">Extracted Questions</h3>
-                  <p className="text-xs text-muted-foreground">
+                  <h3 className="text-hierarchy-4 mb-1" id="extracted-questions-heading">Extracted Questions</h3>
+                  <p className="text-caption" role="description">
                     Review and edit the questions extracted from your input:
                   </p>
                 </div>
 
-                <div className="space-y-1 mb-3 transition-all duration-300">
+                <div 
+                  className="space-y-1 mb-3 transition-all duration-300"
+                  role="list"
+                  aria-labelledby="extracted-questions-heading"
+                >
                   {isExtractingQueries ? (
                     <>
                       {[1, 2, 3, 4].slice(0, visibleQuestionCount).map((index) => (
                         <div 
                           key={`skeleton-${index}`} 
-                          className="relative animate-pulse"
+                          className="relative"
                           style={{
-                            animation: `fadeIn 0.3s ease-in-out`,
+                            animation: `fadeIn 0.3s ease-in-out ${(index - 1) * 0.1}s both`,
                             opacity: 1
                           }}
                         >
@@ -230,10 +238,10 @@ export function BottomBar({
                               Question {index}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="min-h-[40px] rounded-md bg-muted/30">
+                              <div className="min-h-[40px] rounded-md bg-muted/30 relative overflow-hidden">
                                 <div className="p-2 space-y-2">
-                                  <div className="h-3 bg-muted/50 rounded w-full"></div>
-                                  <div className="h-3 bg-muted/50 rounded w-4/5"></div>
+                                  <div className="h-3 bg-muted/50 rounded w-full skeleton"></div>
+                                  <div className="h-3 bg-muted/50 rounded w-4/5 skeleton"></div>
                                 </div>
                               </div>
                             </div>
@@ -333,7 +341,7 @@ export function BottomBar({
                       onClick={onAddExtractedQuery}
                       variant="outline"
                       size="sm"
-                      className="text-xs h-7 bg-transparent"
+                      className="text-xs h-7 bg-transparent interactive-scale focus-ring"
                       disabled={isExtractingQueries}
                     >
                       <Plus className="h-3 w-3 mr-1" />
@@ -343,7 +351,7 @@ export function BottomBar({
                       onClick={() => onSetFavoritesModalOpen(true)}
                       variant="outline"
                       size="sm"
-                      className="text-xs h-7 bg-transparent"
+                      className="text-xs h-7 bg-transparent interactive-scale focus-ring"
                       disabled={isExtractingQueries}
                     >
                       <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -358,13 +366,13 @@ export function BottomBar({
                     </Button>
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={onCancelExtraction} variant="ghost" size="sm" className="text-xs h-7">
+                    <Button onClick={onCancelExtraction} variant="ghost" size="sm" className="text-xs h-7 interactive-scale focus-ring">
                       Cancel
                     </Button>
                     <Button
                       onClick={onSubmitExtractedQueries}
                       disabled={isExtractingQueries || !extractedQueries.some((q) => q.text.trim())}
-                      className="text-xs h-7 bg-primary hover:bg-primary/90"
+                      className="text-xs h-7 bg-primary hover:bg-primary/90 interactive-glow focus-ring"
                       size="sm"
                     >
                       {isExtractingQueries ? "Extracting..." : "Submit request"}
@@ -374,7 +382,7 @@ export function BottomBar({
               </div>
             </div>
           ) : (
-            <div className="bg-card/80 backdrop-blur-md border border-border/50 rounded-xl shadow-sm">
+            <div className="bg-card/90 backdrop-blur-md border border-border/50 rounded-xl shadow-lg interactive-lift">
               <div className="p-3">
                 <div className="space-y-2">
                   <ScrollArea className={queryInputs.length > 1 ? "max-h-[100px] w-full" : ""}>

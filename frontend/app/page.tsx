@@ -596,6 +596,16 @@ const LegalCaseAnalysis = () => {
   }
 
   const handleSubmitQuery = async (inputId?: string) => {
+    // Check if files are uploaded before allowing any query actions
+    if (uploadedFiles.length === 0) {
+      toast({
+        title: "No files uploaded",
+        description: "Please upload case files before submitting queries.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (queryState === "input") {
       if (queryMode === "auto" && queryInputs.length === 1) {
         const inputText = queryInputs[0].text.trim()
@@ -1726,6 +1736,7 @@ const LegalCaseAnalysis = () => {
             fileInputRef={fileInputRef}
             textareaRef={textareaRef}
             favoritesModalOpen={favoritesModalOpen}
+            hasUploadedFiles={uploadedFiles.length > 0}
             swappingQueries={swappingQueries}
             swappedQueries={swappedQueries}
             previousQueries={previousQueries}

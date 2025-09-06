@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Plus, X, Send, Mic, RefreshCw, Undo } from "lucide-react"
 
 interface UploadedFile {
@@ -41,6 +42,7 @@ interface BottomBarProps {
   fileInputRef: RefObject<HTMLInputElement>
   textareaRef?: RefObject<HTMLTextAreaElement>
   favoritesModalOpen: boolean
+  hasUploadedFiles: boolean
   
   // Swap state for extracted queries
   swappingQueries?: Set<string>
@@ -84,6 +86,7 @@ export function BottomBar({
   recordingState,
   fileInputRef,
   textareaRef,
+  hasUploadedFiles,
   swappingQueries = new Set(),
   swappedQueries = new Set(),
   previousQueries = new Map(),
@@ -399,14 +402,23 @@ export function BottomBar({
                     <Button onClick={onCancelExtraction} variant="ghost" size="sm" className="text-xs h-7 interactive-scale focus-ring">
                       Cancel
                     </Button>
-                    <Button
-                      onClick={onSubmitExtractedQueries}
-                      disabled={isExtractingQueries || !extractedQueries.some((q) => q.text.trim())}
-                      className="text-xs h-7 bg-primary hover:bg-primary/90 interactive-glow focus-ring"
-                      size="sm"
-                    >
-                      {isExtractingQueries ? "Extracting..." : "Submit request"}
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={onSubmitExtractedQueries}
+                          disabled={isExtractingQueries || !extractedQueries.some((q) => q.text.trim()) || !hasUploadedFiles}
+                          className="text-xs h-7 bg-primary hover:bg-primary/90 interactive-glow focus-ring"
+                          size="sm"
+                        >
+                          {isExtractingQueries ? "Extracting..." : "Submit request"}
+                        </Button>
+                      </TooltipTrigger>
+                      {!hasUploadedFiles && (
+                        <TooltipContent side="top">
+                          <p>Upload case files to enable query submission</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
                   </div>
                 </div>
               </div>
@@ -439,7 +451,9 @@ export function BottomBar({
                                 onChange={(e) => onUpdateQueryInput(input.id, e.target.value)}
                                 onKeyDown={(e) => onKeyDown(e, input.id)}
                                 placeholder={
-                                  index === 0
+                                  !hasUploadedFiles
+                                    ? "Upload case files first to enable querying..."
+                                    : index === 0
                                     ? queryMode === "auto"
                                       ? "Describe what you want to analyze in your case files..."
                                       : "Ask a question about your case files..."
@@ -544,14 +558,23 @@ export function BottomBar({
                             )}
                             {((queryInputs.length === 1 && index === 0) ||
                               (queryInputs.length > 1 && index === queryInputs.length - 1)) && (
-                              <Button
-                                onClick={onSubmitQuery}
-                                disabled={!queryInputs.some((input) => input.text.trim())}
-                                className="h-8 px-3 bg-white hover:bg-gray-50 text-black border border-gray-300 shadow-sm text-xs"
-                                size="sm"
-                              >
-                                <Send className="h-3.5 w-3.5 stroke-black" />
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    onClick={onSubmitQuery}
+                                    disabled={!queryInputs.some((input) => input.text.trim()) || !hasUploadedFiles}
+                                    className="h-8 px-3 bg-white hover:bg-gray-50 text-black border border-gray-300 shadow-sm text-xs"
+                                    size="sm"
+                                  >
+                                    <Send className="h-3.5 w-3.5 stroke-black" />
+                                  </Button>
+                                </TooltipTrigger>
+                                {!hasUploadedFiles && (
+                                  <TooltipContent side="top">
+                                    <p>Upload case files to enable query submission</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
                             )}
                           </div>
                         </div>

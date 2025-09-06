@@ -14,7 +14,8 @@ import type {
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Network error' }))
-    throw new Error(error.error || `HTTP error! status: ${response.status}`)
+    // Preserve the full error structure for better frontend error handling
+    throw new Error(JSON.stringify(error))
   }
   return response.json()
 }
@@ -242,14 +243,17 @@ export async function getQueryStatus(queryId: string) {
 }
 
 // Generate combined analysis for a document
-export async function generateCombinedAnalysis(fileId: string) {
+export async function generateCombinedAnalysis(fileId: string, queries: any[] = []) {
   const response = await fetch('/api/combined-analysis', {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ file_id: fileId })
+    body: JSON.stringify({ 
+      file_id: fileId,
+      queries: queries
+    })
   })
   return handleResponse(response)
 }

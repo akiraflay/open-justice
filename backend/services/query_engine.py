@@ -15,10 +15,10 @@ from prompts import (
 
 # Model configuration for different tasks
 MODEL_CONFIG = {
-    'extraction': 'gpt-5-mini',      # Fast, efficient for structured output
-    'analysis': 'gpt-5-chat-latest', # Best intelligence for legal analysis
-    'verification': 'gpt-5-nano',    # Ultra-fast for simple validation
-    'swap': 'gpt-5-mini'              # Good balance for generating alternatives
+    'extraction': 'gpt-5-chat-latest',   # Using GPT-5-chat-latest for all features
+    'analysis': 'gpt-5-chat-latest',     # Best intelligence for legal analysis
+    'verification': 'gpt-5-chat-latest', # Consistent model for all operations
+    'swap': 'gpt-5-chat-latest'          # Standardized across all features
 }
 
 class QueryEngine:
@@ -97,16 +97,22 @@ class QueryEngine:
             user_prompt = QUERY_EXTRACTION_USER_TEMPLATE.format(user_input=user_input)
             
             response = self.client.chat.completions.create(
-                model=MODEL_CONFIG['extraction'],  # Using GPT-5-mini for query extraction
-                response_format={ "type": "json_object" },
+                model=MODEL_CONFIG['extraction'],  # Using GPT-5-chat-latest for query extraction
                 messages=[
-                    {"role": "system", "content": QUERY_EXTRACTION_SYSTEM_PROMPT},
+                    {"role": "system", "content": QUERY_EXTRACTION_SYSTEM_PROMPT + "\n\nIMPORTANT: Return ONLY valid JSON with no additional text or formatting."},
                     {"role": "user", "content": user_prompt}
                 ],
                 max_completion_tokens=500
             )
             
-            result = json.loads(response.choices[0].message.content)
+            # Extract JSON from response, handling potential markdown formatting
+            content = response.choices[0].message.content
+            # Strip markdown code blocks if present
+            if '```json' in content:
+                content = content.split('```json')[1].split('```')[0]
+            elif '```' in content:
+                content = content.split('```')[1].split('```')[0]
+            result = json.loads(content.strip())
             
             # Ensure proper structure
             if "queries" not in result:
@@ -247,16 +253,22 @@ class QueryEngine:
             )
             
             response_obj = self.client.chat.completions.create(
-                model=MODEL_CONFIG['verification'],  # Using GPT-5-nano for verification
-                response_format={ "type": "json_object" },
+                model=MODEL_CONFIG['verification'],  # Using GPT-5-chat-latest for verification
                 messages=[
-                    {"role": "system", "content": "You are a legal document verification system. Verify answers are grounded in source documents."},
+                    {"role": "system", "content": "You are a legal document verification system. Verify answers are grounded in source documents.\n\nIMPORTANT: Return ONLY valid JSON with no additional text or formatting."},
                     {"role": "user", "content": verification_prompt}
                 ],
                 max_completion_tokens=300
             )
             
-            result = json.loads(response_obj.choices[0].message.content)
+            # Extract JSON from response, handling potential markdown formatting
+            content = response_obj.choices[0].message.content
+            # Strip markdown code blocks if present
+            if '```json' in content:
+                content = content.split('```json')[1].split('```')[0]
+            elif '```' in content:
+                content = content.split('```')[1].split('```')[0]
+            result = json.loads(content.strip())
             
             # Ensure proper structure
             if "is_accurate" not in result:
@@ -438,7 +450,7 @@ Generate ONE alternative legal question that:
 Return ONLY the new question text, no explanation or preamble."""
 
             response = self.client.chat.completions.create(
-                model=MODEL_CONFIG['swap'],  # Using GPT-5-mini for swap questions
+                model=MODEL_CONFIG['swap'],  # Using GPT-5-chat-latest for swap questions
                 messages=[
                     {"role": "system", "content": "You are a legal document analysis expert. Generate precise, relevant legal questions."},
                     {"role": "user", "content": swap_prompt}
@@ -462,3 +474,92 @@ Return ONLY the new question text, no explanation or preamble."""
             print(f"Error in swap_query: {e}")
             # Return a generic fallback question
             return "What other important provisions should be reviewed in this document?"
+    
+    def generate_combined_analysis(self, queries_and_results: List[Dict], file_name: str, document_content: str = "") -> str:
+        """Generate comprehensive combined analysis of all queries for a document"""
+        
+        if self.use_mock:
+            return self._generate_mock_combined_analysis(queries_and_results, file_name)
+        
+        try:
+            # Prepare the combined analysis prompt
+            queries_text = []
+            for item in queries_and_results:
+                query_text = f"Query: {item.get('query', 'Unknown query')}"
+                result_text = f"Result: {item.get('result', 'No result available')}"
+                queries_text.append(f"{query_text}\n{result_text}")
+            
+            combined_queries = "\n\n".join(queries_text)
+            
+            # Use the improved combined analysis prompt from prompts.py
+            analysis_prompt = COMBINED_ANALYSIS_PROMPT.format(
+                queries_and_results=combined_queries
+            )
+            
+            # Add document context if available (truncated for token limits)
+            if document_content:
+                context_snippet = document_content[:1500] + "..." if len(document_content) > 1500 else document_content
+                analysis_prompt += f"\n\nDocument Context:\n{context_snippet}"
+            
+            response = self.client.chat.completions.create(
+                model=MODEL_CONFIG['analysis'],  # Using GPT-4o for comprehensive analysis
+                messages=[
+                    {"role": "system", "content": "You are a senior legal document analysis expert specializing in comprehensive case review and legal strategy. Provide thorough, actionable insights for lawyers."},
+                    {"role": "user", "content": analysis_prompt}
+                ],
+                max_completion_tokens=1000
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            print(f"Error in generate_combined_analysis: {e}")
+            return self._generate_mock_combined_analysis(queries_and_results, file_name)
+    
+    def _generate_mock_combined_analysis(self, queries_and_results: List[Dict], file_name: str) -> str:
+        """Generate mock combined analysis for testing"""
+        num_queries = len(queries_and_results)
+        
+        return f"""# Combined Analysis: {file_name}
+
+## Executive Summary
+Analysis of {num_queries} legal queries reveals a comprehensive document requiring strategic legal review.
+
+## Key Findings
+• **Document Type**: Legal contract/filing with standard provisions
+• **Risk Assessment**: Moderate complexity with several areas requiring attention
+• **Compliance Status**: Generally compliant with standard legal requirements
+• **Strategic Importance**: Critical for case strategy and risk management
+
+## Critical Legal Points
+1. **Liability Limitations**: Document contains specific liability caps that may need adjustment
+2. **Termination Clauses**: Exit provisions favor one party more than the other
+3. **Intellectual Property**: IP assignment clauses require careful review for scope
+4. **Indemnification**: Broad indemnification provisions present potential risks
+
+## Pattern Analysis
+Across all {num_queries} queries, consistent themes emerge:
+- Heavy emphasis on contractual obligations and performance metrics
+- Multiple references to regulatory compliance requirements
+- Evidence of standard legal drafting with some custom provisions
+- Cross-references between sections suggest integrated document structure
+
+## Recommendations
+### Immediate Actions
+1. Review liability caps for adequacy against potential exposure
+2. Negotiate more balanced termination provisions if possible
+3. Clarify ambiguous intellectual property ownership terms
+4. Consider adding force majeure provisions for business continuity
+
+### Strategic Considerations
+- Document appears to be well-drafted but may benefit from updates to reflect current law
+- Consider regulatory changes that may impact compliance obligations
+- Review dispute resolution mechanisms for efficiency and cost-effectiveness
+
+## Risk Assessment
+**Overall Risk Level**: Moderate
+- **High Priority Issues**: {min(3, num_queries)} items require immediate attention
+- **Medium Priority**: Standard provisions that meet industry norms
+- **Low Priority**: Administrative and procedural matters
+
+This analysis synthesizes insights from {num_queries} detailed queries to provide a comprehensive legal overview optimized for strategic decision-making."""

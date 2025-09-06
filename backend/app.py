@@ -397,6 +397,8 @@ def generate_combined_analysis():
         return jsonify({'error': 'No file_id provided'}), 400
     
     file_id = data['file_id']
+    print(f"DEBUG: Looking for file_id: {file_id}")
+    print(f"DEBUG: Session files: {[f.get('id', 'no-id') for f in session_data.get('files', [])]}")
     
     # Find the file
     target_file = None
@@ -406,94 +408,108 @@ def generate_combined_analysis():
             break
     
     if not target_file:
+        print(f"DEBUG: File {file_id} not found in session")
         return jsonify({'error': 'File not found'}), 404
     
-    # Get all queries for this session
-    queries = session_data.get('queries', [])
+    # Get queries from request data (sent by frontend) or fall back to session
+    queries = data.get('queries', [])
+    print(f"DEBUG: Received queries from request: {len(queries) if queries else 0}")
+    if queries:
+        print(f"DEBUG: First query sample: {queries[0] if queries else 'None'}")
     
     if not queries:
+        # Fallback to session queries for backwards compatibility
+        queries = session_data.get('queries', [])
+        print(f"DEBUG: Fallback to session queries: {len(queries) if queries else 0}")
+    
+    if not queries:
+        print("DEBUG: No queries found in either request or session")
         return jsonify({'error': 'No queries to analyze'}), 400
     
     try:
         # Extract document text
         doc_text = ""
         if target_file['type'] == 'pdf':
-            doc_text = doc_processor.extract_pdf_text(target_file['path'])
+            try:
+                doc_text = doc_processor.extract_pdf_text(target_file['path'])
+                if not doc_text or doc_text.strip() == "":
+                    doc_text = "[Document text could not be extracted]"
+            except Exception as pdf_error:
+                print(f"Error extracting PDF text: {pdf_error}")
+                doc_text = "[Error extracting document text]"
         
-        # Combine all query results
+        # Validate we have query results to analyze
+        # Handle both frontend query structure and backend session structure
+        queries_with_results = []
+        for q in queries:
+            if isinstance(q, dict):
+                # Frontend structure: check for 'results' field
+                if 'results' in q and q.get('results') and q.get('results').strip():
+                    queries_with_results.append(q)
+                # Backend session structure: check for 'results' field
+                elif 'results' in q and q.get('results') and q.get('results').strip():
+                    queries_with_results.append(q)
+        
+        if not queries_with_results:
+            return jsonify({
+                'error': 'No completed queries found for analysis',
+                'details': f'Found {len(queries)} queries but none have results to analyze. Please run some queries first.'
+            }), 400
+        
+        # Prepare query and results data for the new method
         queries_and_results = []
-        for query in queries:
-            if 'results' in query:
-                queries_and_results.append(f"Query: {query['text']}\nResult: {query.get('results', 'No result')}")
-        
-        # Generate combined analysis
-        combined_prompt = f"""
-        You are a legal document analysis expert. Review all the queries and their results for the document "{target_file['name']}".
-        
-        Queries and Results:
-        {chr(10).join(queries_and_results)}
-        
-        Provide a comprehensive summary that:
-        1. Identifies key patterns and connections across all queries
-        2. Highlights the most important legal findings
-        3. Notes any contradictions or gaps in the analysis
-        4. Provides actionable insights for a lawyer reviewing this document
-        5. Lists the top 3-5 most critical points found
-        
-        Keep the summary concise but thorough, focusing on what would be most useful for legal document review.
-        """
-        
-        # Get analysis from query engine
-        if query_engine.use_mock:
-            result = f"""Combined Analysis for {target_file['name']}:
+        for query in queries_with_results:
+            # Handle both frontend and backend query structures
+            query_text = query.get('text', query.get('query', 'Unknown query'))
+            result_text = query.get('results', query.get('result', 'No result available'))
             
-Key Findings:
-• {len(queries)} queries analyzed across this document
-• Document type: Legal filing/contract
-• Multiple references to contractual obligations identified
-• Evidence of compliance with regulatory requirements noted
-
-Critical Legal Points:
-1. Liability limitations are clearly defined in sections 3-5
-2. Termination clauses favor the drafting party
-3. Intellectual property assignments require careful review
-4. Indemnification provisions are broadly written
-
-Patterns Identified:
-- Consistent use of standard legal terminology
-- References to applicable state law throughout
-- Multiple cross-references between sections
-
-Recommendations:
-• Review liability caps for adequacy
-• Clarify ambiguous IP ownership terms
-• Consider adding force majeure provisions
-• Ensure compliance with recent regulatory changes
-
-This analysis synthesizes {len(queries)} separate queries to provide a comprehensive overview of the document's legal implications."""
-        else:
-            # Use real LLM
-            from services.query_engine import MODEL_CONFIG
-            response = query_engine.client.chat.completions.create(
-                model=MODEL_CONFIG['analysis'],  # Using GPT-5-chat-latest for combined analysis
-                messages=[
-                    {"role": "system", "content": "You are a legal document analysis expert specializing in comprehensive document review."},
-                    {"role": "user", "content": combined_prompt}
-                ],
-                max_completion_tokens=800
-            )
-            result = response.choices[0].message.content
+            queries_and_results.append({
+                'query': query_text,
+                'result': result_text
+            })
+        
+        # Use the new dedicated combined analysis method
+        result = query_engine.generate_combined_analysis(
+            queries_and_results=queries_and_results,
+            file_name=target_file['name'],
+            document_content=doc_text[:3000] if doc_text else ""
+        )
+        
+        if not result or result.strip() == "":
+            return jsonify({
+                'error': 'Combined analysis generation failed',
+                'details': 'The analysis service returned an empty response. Please try again.'
+            }), 500
         
         return jsonify({
             'success': True,
             'analysis': result,
             'file_id': file_id,
             'file_name': target_file['name'],
-            'query_count': len(queries)
+            'query_count': len(queries_with_results),
+            'total_queries': len(queries)
         })
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        error_msg = str(e)
+        print(f"Combined analysis error: {error_msg}")
+        
+        # Provide more specific error messages
+        if "OpenAI" in error_msg or "API" in error_msg:
+            return jsonify({
+                'error': 'AI service temporarily unavailable',
+                'details': 'The analysis service is currently experiencing issues. Please try again in a few moments.'
+            }), 503
+        elif "temperature" in error_msg.lower():
+            return jsonify({
+                'error': 'Configuration error',
+                'details': 'AI model configuration needs updating. Please contact support.'
+            }), 500
+        else:
+            return jsonify({
+                'error': 'Analysis failed',
+                'details': f'An unexpected error occurred: {error_msg}'
+            }), 500
 
 @app.route('/api/queries', methods=['GET'])
 def list_queries():

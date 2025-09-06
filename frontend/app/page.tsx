@@ -1062,8 +1062,23 @@ const LegalCaseAnalysis = () => {
       )
 
       try {
-        // Call real API for combined analysis
-        const response = await generateCombinedAnalysisAPI(fileId)
+        // Call real API for combined analysis with queries data
+        // Filter queries that have results for this specific file
+        const queriesForFile = queries
+          .filter(q => {
+            const fileResult = q.fileResults?.find(fr => fr.fileId === fileId)
+            return fileResult && fileResult.status === 'completed' && fileResult.result && fileResult.result.trim() !== ""
+          })
+          .map(q => {
+            const fileResult = q.fileResults?.find(fr => fr.fileId === fileId)
+            return {
+              text: q.text,
+              results: fileResult?.result || ""
+            }
+          })
+        
+        console.log(`DEBUG: Found ${queriesForFile.length} queries for file ${fileId}:`, queriesForFile)
+        const response = await generateCombinedAnalysisAPI(fileId, queriesForFile)
         
         if (response.success) {
           setQueries((prevQueries) =>
@@ -1087,6 +1102,35 @@ const LegalCaseAnalysis = () => {
         }
       } catch (error) {
         console.error('Combined analysis error:', error)
+        
+        let errorTitle = "Analysis Failed"
+        let errorDescription = "Failed to generate combined analysis. Please try again."
+        
+        // Parse error response for better user messaging
+        if (error instanceof Error) {
+          try {
+            const errorData = JSON.parse(error.message)
+            if (errorData.error && errorData.details) {
+              errorTitle = errorData.error
+              errorDescription = errorData.details
+            } else if (errorData.error) {
+              errorDescription = errorData.error
+            }
+          } catch {
+            // If parsing fails, check for specific error patterns
+            if (error.message.includes("No completed queries")) {
+              errorTitle = "No Queries Available"
+              errorDescription = "Please run some queries on your document before generating a combined analysis."
+            } else if (error.message.includes("AI service temporarily unavailable")) {
+              errorTitle = "Service Unavailable"
+              errorDescription = "The AI analysis service is temporarily unavailable. Please try again in a few moments."
+            } else if (error.message.includes("Configuration error")) {
+              errorTitle = "Configuration Issue"
+              errorDescription = "There's a configuration issue with the analysis service. Please contact support."
+            }
+          }
+        }
+        
         setQueries((prevQueries) =>
           prevQueries.map((q) =>
             q.id === firstQuery.id
@@ -1094,15 +1138,15 @@ const LegalCaseAnalysis = () => {
                   ...q,
                   combinedAnalysisProgress: 0,
                   combinedAnalysisRequested: false,
-                  summary: `Error: Failed to generate combined analysis. ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  summary: `Error: ${errorTitle}\n\n${errorDescription}`,
                 }
               : q,
           ),
         )
         
         toast({
-          title: "Analysis Failed",
-          description: "Failed to generate combined analysis. Please try again.",
+          title: errorTitle,
+          description: errorDescription,
           variant: "destructive",
         })
       } finally {

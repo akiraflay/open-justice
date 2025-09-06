@@ -1070,8 +1070,13 @@ const LegalCaseAnalysis = () => {
     const query = extractedQueries.find(q => q.id === queryId)
     if (!query) return
     
-    // Store previous query text for undo
-    setPreviousQueries(prev => new Map(prev).set(queryId, query.text))
+    // Check if query is empty or blank
+    const isBlankQuery = !query.text || !query.text.trim()
+    
+    // Store previous query text for undo (only if not blank)
+    if (!isBlankQuery) {
+      setPreviousQueries(prev => new Map(prev).set(queryId, query.text))
+    }
     
     // Mark as swapping
     setSwappingQueries(prev => new Set(prev).add(queryId))
@@ -1091,19 +1096,21 @@ const LegalCaseAnalysis = () => {
           prev.map(q => q.id === queryId ? { ...q, text: result.query } : q)
         )
         
-        // Mark as swapped
-        setSwappedQueries(prev => new Set(prev).add(queryId))
+        // Mark as swapped (only if it wasn't blank initially)
+        if (!isBlankQuery) {
+          setSwappedQueries(prev => new Set(prev).add(queryId))
+        }
         
         toast({
-          title: "Query swapped",
-          description: "Generated a new question successfully.",
+          title: isBlankQuery ? "Query generated" : "Query swapped",
+          description: isBlankQuery ? "Generated a relevant question." : "Generated a new question successfully.",
           duration: 1000,
         })
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to generate replacement query. Please try again.",
+        description: "Failed to generate query. Please try again.",
         variant: "destructive",
         duration: 1000,
       })

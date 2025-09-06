@@ -207,9 +207,6 @@ def swap_query():
     user_context = data.get('user_context', '')
     existing_queries = data.get('existing_queries', [])
     
-    if not original_query:
-        return jsonify({'error': 'No original query provided'}), 400
-    
     try:
         # Use the query engine to generate a replacement query
         new_query = query_engine.swap_query(original_query, user_context, existing_queries)

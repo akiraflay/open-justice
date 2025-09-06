@@ -413,6 +413,9 @@ For full AI-powered analysis, please ensure the OpenAI API key is configured."""
     def swap_query(self, original_query: str, user_context: str, existing_queries: List[str]) -> str:
         """Generate a contextually similar replacement query that avoids duplicates"""
         
+        # Check if original query is empty or blank
+        is_blank_query = not original_query or not original_query.strip()
+        
         if self.use_mock:
             # Mock response for testing
             replacements = [
@@ -428,10 +431,29 @@ For full AI-powered analysis, please ensure the OpenAI API key is configured."""
             return new_query if new_query else "What are the key financial obligations in this agreement?"
         
         try:
-            # Prepare the prompt for generating a replacement query
-            existing_list = "\n".join([f"- {q}" for q in existing_queries])
+            # Prepare the prompt based on whether we're generating new or swapping
+            existing_list = "\n".join([f"- {q}" for q in existing_queries]) if existing_queries else "None"
             
-            swap_prompt = f"""You are a legal document analysis assistant helping to generate alternative questions for legal document review.
+            if is_blank_query:
+                # Generate a new relevant question from scratch
+                swap_prompt = f"""You are a legal document analysis assistant helping to generate relevant questions for legal document review.
+
+User's original request: "{user_context}"
+
+Already existing questions (DO NOT duplicate any of these):
+{existing_list}
+
+Generate ONE relevant legal question that:
+1. Is directly relevant to the user's original request about {user_context}
+2. Does NOT duplicate any of the existing questions listed above
+3. Maintains a professional legal analysis focus
+4. Is specific and actionable for document analysis
+5. Helps analyze key aspects of the legal documents
+
+Return ONLY the new question text, no explanation or preamble."""
+            else:
+                # Swap an existing question with an alternative
+                swap_prompt = f"""You are a legal document analysis assistant helping to generate alternative questions for legal document review.
 
 User's original request: "{user_context}"
 

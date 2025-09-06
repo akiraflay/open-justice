@@ -180,32 +180,32 @@
 
 /* Typography improvements */
 .text-hierarchy-1 {
-  @apply text-2xl font-bold tracking-tight;
-  line-height: 1.2;
+  @apply text-xl font-bold tracking-tight;
+  line-height: 1.15;
 }
 
 .text-hierarchy-2 {
-  @apply text-xl font-semibold tracking-tight;
-  line-height: 1.3;
+  @apply text-lg font-semibold tracking-tight;
+  line-height: 1.2;
 }
 
 .text-hierarchy-3 {
-  @apply text-lg font-medium;
-  line-height: 1.4;
+  @apply text-base font-medium;
+  line-height: 1.3;
 }
 
 .text-hierarchy-4 {
-  @apply text-base font-medium;
-  line-height: 1.5;
+  @apply text-sm font-medium;
+  line-height: 1.4;
 }
 
 .text-body {
-  @apply text-sm leading-relaxed;
+  @apply text-xs leading-normal;
 }
 
 .text-caption {
   @apply text-xs text-muted-foreground;
-  line-height: 1.4;
+  line-height: 1.3;
 }
 
 /* Interactive states */

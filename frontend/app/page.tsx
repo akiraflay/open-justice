@@ -21,7 +21,8 @@ import {
   processQuery,
   streamQuery,
   generateCombinedAnalysis as generateCombinedAnalysisAPI,
-  swapQuery
+  swapQuery,
+  clearSession
 } from "@/lib/api"
 import {
   Upload,
@@ -51,6 +52,7 @@ interface UploadedFile {
   uploadProgress?: number
   isTranscribing?: boolean
   transcriptionProgress?: number
+  transcript?: string
 }
 
 interface Query {
@@ -323,7 +325,9 @@ const LegalCaseAnalysis = () => {
             size: file.size,
             uploadedAt: new Date(file.uploadedAt),
             isTranscribing: false,
-            transcriptionProgress: undefined
+            transcriptionProgress: undefined,
+            // Preserve transcript from session
+            transcript: file.transcript
           }))
           setUploadedFiles(formattedFiles)
           
@@ -439,14 +443,56 @@ const LegalCaseAnalysis = () => {
           })
         }
 
-        // Simulate upload progress
+        // Improved progress simulation for better UX
         let uploadProgress = 0
+        let progressPhase = 'uploading' // 'uploading' | 'processing' | 'transcribing'
+        const startTime = Date.now()
+        
         const uploadProgressInterval = setInterval(() => {
-          uploadProgress += Math.random() * 20 + 10
-          if (uploadProgress >= 90) {
-            uploadProgress = 90 // Cap at 90% until actual upload completes
-            clearInterval(uploadProgressInterval)
+          const elapsed = Date.now() - startTime
+          
+          if (isTranscribableFile(fileType)) {
+            // For audio/video files, show more realistic progress
+            if (elapsed < 2000) {
+              // First 2 seconds: Upload phase (0-40%)
+              uploadProgress = Math.min(40, (elapsed / 2000) * 40)
+              progressPhase = 'uploading'
+            } else if (elapsed < 3000) {
+              // Next 1 second: Processing phase (40-50%)
+              uploadProgress = 40 + Math.min(10, ((elapsed - 2000) / 1000) * 10)
+              progressPhase = 'processing'
+            } else if (elapsed < 13000) {
+              // Next 10 seconds: Transcription phase (50-95%)
+              uploadProgress = 50 + Math.min(45, ((elapsed - 3000) / 10000) * 45)
+              progressPhase = 'transcribing'
+              
+              // Update status message during transcription
+              if (elapsed === 3000 || (elapsed > 3000 && elapsed % 2000 === 0)) {
+                const messages = [
+                  "Transcribing audio...",
+                  "Processing speech...",
+                  "Analyzing audio content...",
+                  "Almost finished..."
+                ]
+                const messageIndex = Math.floor((elapsed - 3000) / 2500)
+                if (messageIndex < messages.length) {
+                  // Silently update the file status - no toast spam
+                }
+              }
+            } else {
+              // After 13 seconds: Hold at 95% until server responds
+              uploadProgress = 95
+              progressPhase = 'transcribing'
+            }
+          } else {
+            // For non-audio files, use simpler progress
+            uploadProgress += Math.random() * 20 + 10
+            if (uploadProgress >= 90) {
+              uploadProgress = 90 // Cap at 90% until actual upload completes
+              clearInterval(uploadProgressInterval)
+            }
           }
+          
           setUploadedFiles((prev) =>
             prev.map((f) => 
               f.id === tempFileId 
@@ -454,9 +500,14 @@ const LegalCaseAnalysis = () => {
                 : f
             ),
           )
-        }, 300)
+          
+          // Stop interval if we've been running too long (safety)
+          if (elapsed > 20000) {
+            clearInterval(uploadProgressInterval)
+          }
+        }, 100)
 
-        // Upload file to backend
+        // Upload file to backend (this includes transcription for audio files)
         const response = await uploadFileAPI(file)
         
         clearInterval(uploadProgressInterval)
@@ -472,68 +523,24 @@ const LegalCaseAnalysis = () => {
                     uploadedAt: new Date(response.file.uploadedAt),
                     isUploading: false,
                     uploadProgress: 100,
-                    // For transcribable files, start transcribing unless already complete
-                    isTranscribing: isTranscribableFile(fileType) && !response.file.transcript,
-                    transcriptionProgress: isTranscribableFile(fileType) 
-                      ? (response.file.transcript ? 100 : 10) 
-                      : undefined,
+                    // Transcription is already complete when we get here for audio files
+                    isTranscribing: false,
+                    transcriptionProgress: isTranscribableFile(fileType) ? 100 : undefined,
+                    // Preserve transcript from backend response
+                    transcript: response.file.transcript,
                   }
                 : f
             ),
           )
 
           // Handle transcription status
-          const actualFileId = response.file.id
           if (isTranscribableFile(fileType)) {
-            if (response.file.transcript) {
-              // Transcription was completed during upload
-              toast({
-                title: "Transcription complete",
-                description: `Audio from ${file.name} has been transcribed and is ready for analysis.`,
-                duration: 1000,
-              })
-            } else {
-              // Transcription is still in progress - keep file visible with processing indicator
-              toast({
-                title: "Processing audio", 
-                description: `Transcribing ${file.name}... File will remain visible while processing.`,
-                duration: 1000,
-              })
-              
-              // Simulate progress updates for demo purposes
-              // In a real app, you'd poll the backend or use WebSocket updates
-              let progress = 10
-              const progressInterval = setInterval(() => {
-                progress += Math.random() * 15 + 5
-                if (progress >= 100) {
-                  progress = 100
-                  clearInterval(progressInterval)
-                  
-                  // Mark transcription as complete
-                  setUploadedFiles((prev) =>
-                    prev.map((f) => 
-                      f.id === actualFileId 
-                        ? { ...f, isTranscribing: false, transcriptionProgress: 100 } 
-                        : f
-                    ),
-                  )
-                  
-                  toast({
-                    title: "Transcription complete",
-                    description: `Audio from ${file.name} has been processed and is ready for analysis.`,
-                    duration: 1000,
-                  })
-                } else {
-                  setUploadedFiles((prev) =>
-                    prev.map((f) => 
-                      f.id === actualFileId 
-                        ? { ...f, transcriptionProgress: Math.round(progress) } 
-                        : f
-                    ),
-                  )
-                }
-              }, 500)
-            }
+            // Transcription is completed during upload in the backend
+            toast({
+              title: "Audio processed",
+              description: `${file.name} has been transcribed and is ready for analysis.`,
+              duration: 1000,
+            })
           }
 
           toast({
@@ -694,6 +701,8 @@ const LegalCaseAnalysis = () => {
           result: "",
           status: "pending" as const,
           progress: 0,
+          // Include transcript for backend processing
+          transcript: file.transcript,
         })),
       }
       
@@ -832,6 +841,8 @@ const LegalCaseAnalysis = () => {
           result: "",
           status: "pending" as const,
           progress: 0,
+          // Include transcript for backend processing
+          transcript: file.transcript,
         })),
       }
       
@@ -1167,13 +1178,35 @@ const LegalCaseAnalysis = () => {
     setIsExtractingQueries(false)
   }
 
-  const handleNewChat = () => {
-    setUploadedFiles([])
-    setQueries([])
-    setQueryInputs([{ id: Math.random().toString(36).substr(2, 9), text: "" }])
-    setQueryMode("auto")
-    setQueryState("input")
-    setExtractedQueries([])
+  const handleNewChat = async () => {
+    try {
+      // Clear backend session first
+      await clearSession()
+      
+      // Then clear frontend state
+      setUploadedFiles([])
+      setQueries([])
+      setQueryInputs([{ id: Math.random().toString(36).substr(2, 9), text: "" }])
+      setQueryMode("auto")
+      setQueryState("input")
+      setExtractedQueries([])
+      
+      // Optional: Show success toast
+      toast({
+        title: "New session started",
+        description: "Ready to analyze new documents.",
+        duration: 1000,
+      })
+    } catch (error) {
+      console.error('Failed to clear session:', error)
+      // Still clear frontend state even if backend fails
+      setUploadedFiles([])
+      setQueries([])
+      setQueryInputs([{ id: Math.random().toString(36).substr(2, 9), text: "" }])
+      setQueryMode("auto")
+      setQueryState("input")
+      setExtractedQueries([])
+    }
   }
 
   const getSourceAnalysisData = () => {
@@ -1462,14 +1495,6 @@ const LegalCaseAnalysis = () => {
                     Select Files
                   </Button>
                 </Card>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,audio/*,video/*,image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col">
@@ -1521,7 +1546,7 @@ const LegalCaseAnalysis = () => {
                             {groupedQueries[sessionId].map((query) => (
                               <div key={query.id} className="space-y-2.5 mb-4">
                                 <div 
-                                  className="flex items-center gap-2 mb-3 cursor-pointer hover:opacity-80 transition-all duration-200 p-2 -m-2 rounded-lg hover:bg-muted/30 interactive-scale focus-ring"
+                                  className="flex items-center gap-2 mb-3 cursor-pointer hover:opacity-90 transition-opacity duration-150 p-2 -m-2 rounded-lg hover:bg-muted/20 focus-ring"
                                   onClick={() => {
                                     const newExpanded = new Set(expandedQueries)
                                     if (newExpanded.has(query.id)) {
@@ -1548,8 +1573,8 @@ const LegalCaseAnalysis = () => {
                                     }
                                   }}
                                 >
-                                  <Search className="h-4 w-4 text-primary transition-transform duration-200" />
-                                  <h3 className="text-hierarchy-4 flex-1 pr-2">{query.text}</h3>
+                                  <Search className="h-4 w-4 text-primary flex-shrink-0" />
+                                  <h3 className="text-hierarchy-4 flex-1 min-w-0 truncate pr-2">{query.text}</h3>
                                   {expandedQueries.has(query.id) ? (
                                     <ChevronUp className="h-4 w-4 text-muted-foreground" />
                                   ) : (
@@ -1576,16 +1601,16 @@ const LegalCaseAnalysis = () => {
                                         )}
                                         <div className="flex-1 min-w-0">
                                           <div className="flex items-center gap-2 mb-2">
-                                            <h4 className="font-medium text-sm truncate">{fileResult.fileName}</h4>
+                                            <h4 className="font-medium text-xs truncate">{fileResult.fileName}</h4>
                                             <Badge variant="outline" className="text-xs px-1 py-0">
                                               {uploadedFiles.find((f) => f.id === fileResult.fileId)?.size}
                                             </Badge>
                                           </div>
 
                                           {fileResult.status === "completed" && (
-                                            <div className="mt-3 p-4 bg-muted/20 rounded-md border-l-2 border-primary/50">
+                                            <div className="mt-3 p-3 bg-muted/20 rounded-md border-l-2 border-primary/50">
                                               <div 
-                                                className="text-body leading-relaxed prose prose-sm max-w-none"
+                                                className="text-xs leading-normal max-w-none"
                                                 dangerouslySetInnerHTML={{ __html: formatResponseAsHtml(fileResult.result) }}
                                               />
                                             </div>

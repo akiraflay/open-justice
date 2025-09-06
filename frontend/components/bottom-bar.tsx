@@ -229,12 +229,13 @@ export function BottomBar({
                 </Badge>
               ))}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={onAddFile}
-                className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-muted-foreground/30 rounded-md backdrop-blur-sm bg-background/30 interactive-scale focus-ring"
+                className="h-5 px-2 text-xs text-primary hover:text-primary-foreground hover:bg-primary/90 border border-primary/30 hover:border-primary rounded-md backdrop-blur-sm bg-background/50 transition-all duration-200 focus-ring"
+                aria-label="Add files"
               >
-                <Plus className="h-2.5 w-2.5 mr-0.5" />
+                <Plus className="h-3 w-3 mr-1" />
                 Add
               </Button>
             </div>

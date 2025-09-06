@@ -260,8 +260,8 @@ export async function generateCombinedAnalysis(fileId: string, queries: any[] = 
 
 // Clear session
 export async function clearSession() {
-  const response = await fetch('/api/session', {
-    method: 'DELETE',
+  const response = await fetch('/api/clear-session', {
+    method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',

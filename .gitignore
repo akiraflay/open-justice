@@ -12,6 +12,8 @@ frontend/out/
 frontend/build/
 frontend/dist/
 
+venv/
+
 # Cache directories
 frontend/.next/
 .cache/

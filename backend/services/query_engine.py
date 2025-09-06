@@ -13,6 +13,14 @@ from prompts import (
     VERIFICATION_PROMPT
 )
 
+# Model configuration for different tasks
+MODEL_CONFIG = {
+    'extraction': 'gpt-5-mini',      # Fast, efficient for structured output
+    'analysis': 'gpt-5-chat-latest', # Best intelligence for legal analysis
+    'verification': 'gpt-5-nano',    # Ultra-fast for simple validation
+    'swap': 'gpt-5-mini'              # Good balance for generating alternatives
+}
+
 class QueryEngine:
     """Process queries against documents using LLM"""
     
@@ -89,13 +97,12 @@ class QueryEngine:
             user_prompt = QUERY_EXTRACTION_USER_TEMPLATE.format(user_input=user_input)
             
             response = self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",  # Using GPT-4.1 for query extraction
+                model=MODEL_CONFIG['extraction'],  # Using GPT-5-mini for query extraction
                 response_format={ "type": "json_object" },
                 messages=[
                     {"role": "system", "content": QUERY_EXTRACTION_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3,
                 max_completion_tokens=500
             )
             
@@ -115,7 +122,8 @@ class QueryEngine:
             return result
             
         except Exception as e:
-            print(f"Error extracting queries: {e}")
+            print(f"Error extracting queries with {MODEL_CONFIG['extraction']}: {e}")
+            print(f"Full error details: {type(e).__name__}: {str(e)}")
             return self._generate_mock_extracted_queries(user_input)
     
     def _generate_mock_extracted_queries(self, user_input: str) -> Dict:
@@ -159,12 +167,11 @@ class QueryEngine:
             )
             
             response = self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",  # Using GPT-4.1 for better analysis
+                model=MODEL_CONFIG['analysis'],  # Using GPT-5-chat-latest for better analysis
                 messages=[
                     {"role": "system", "content": LEGAL_ANALYSIS_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3,
                 max_completion_tokens=500
             )
             
@@ -199,12 +206,11 @@ class QueryEngine:
             
             # Use streaming API
             stream = self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",  # Using GPT-4.1 for better analysis
+                model=MODEL_CONFIG['analysis'],  # Using GPT-5-chat-latest for better analysis
                 messages=[
                     {"role": "system", "content": LEGAL_ANALYSIS_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3,
                 max_completion_tokens=500,
                 stream=True  # Enable streaming
             )
@@ -241,13 +247,12 @@ class QueryEngine:
             )
             
             response_obj = self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",  # Using GPT-4.1 for verification
+                model=MODEL_CONFIG['verification'],  # Using GPT-5-nano for verification
                 response_format={ "type": "json_object" },
                 messages=[
                     {"role": "system", "content": "You are a legal document verification system. Verify answers are grounded in source documents."},
                     {"role": "user", "content": verification_prompt}
                 ],
-                temperature=0.1,  # Low temperature for consistency
                 max_completion_tokens=300
             )
             
@@ -433,12 +438,11 @@ Generate ONE alternative legal question that:
 Return ONLY the new question text, no explanation or preamble."""
 
             response = self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model=MODEL_CONFIG['swap'],  # Using GPT-5-mini for swap questions
                 messages=[
                     {"role": "system", "content": "You are a legal document analysis expert. Generate precise, relevant legal questions."},
                     {"role": "user", "content": swap_prompt}
                 ],
-                temperature=0.7,  # Higher temperature for more variety
                 max_completion_tokens=100
             )
             

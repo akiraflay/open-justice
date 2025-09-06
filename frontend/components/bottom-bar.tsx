@@ -40,16 +40,22 @@ interface BottomBarProps {
   textareaRef?: RefObject<HTMLTextAreaElement>
   favoritesModalOpen: boolean
   
-  // Swap state
+  // Swap state for extracted queries
   swappingQueries?: Set<string>
   swappedQueries?: Set<string>
   previousQueries?: Map<string, string>
+  
+  // Swap state for manual inputs
+  swappingInputs?: Set<string>
+  swappedInputs?: Set<string>
+  previousInputs?: Map<string, string>
   
   // Handlers
   onRemoveFile: (fileId: string) => void
   onAddFile: () => void
   onUpdateQueryInput: (inputId: string, text: string) => void
   onRemoveQueryInput: (inputId: string) => void
+  onAddQueryInput?: () => void
   onUpdateExtractedQuery: (queryId: string, text: string) => void
   onRemoveExtractedQuery: (queryId: string) => void
   onAddExtractedQuery: () => void
@@ -62,6 +68,8 @@ interface BottomBarProps {
   onVoiceInput: () => void
   onSwapQuery?: (queryId: string) => void
   onUndoSwap?: (queryId: string) => void
+  onSwapInputQuery?: (inputId: string) => void
+  onUndoInputSwap?: (inputId: string) => void
 }
 
 export function BottomBar({
@@ -77,10 +85,14 @@ export function BottomBar({
   swappingQueries = new Set(),
   swappedQueries = new Set(),
   previousQueries = new Map(),
+  swappingInputs = new Set(),
+  swappedInputs = new Set(),
+  previousInputs = new Map(),
   onRemoveFile,
   onAddFile,
   onUpdateQueryInput,
   onRemoveQueryInput,
+  onAddQueryInput,
   onUpdateExtractedQuery,
   onRemoveExtractedQuery,
   onAddExtractedQuery,
@@ -93,6 +105,8 @@ export function BottomBar({
   onVoiceInput,
   onSwapQuery,
   onUndoSwap,
+  onSwapInputQuery,
+  onUndoInputSwap,
 }: BottomBarProps) {
   const [visibleQuestionCount, setVisibleQuestionCount] = useState(1)
 
@@ -368,37 +382,96 @@ export function BottomBar({
                       {queryInputs.map((input, index) => (
                         <div key={input.id} className="flex gap-2 items-start group">
                           <div className="flex-1 min-w-0 relative">
-                            <Textarea
-                              ref={index === 0 ? textareaRef : undefined}
-                              value={input.text}
-                              onChange={(e) => onUpdateQueryInput(input.id, e.target.value)}
-                              onKeyDown={(e) => onKeyDown(e, input.id)}
-                              placeholder={
-                                index === 0
-                                  ? queryMode === "auto"
-                                    ? "Describe what you want to analyze in your case files..."
-                                    : "Ask a question about your case files..."
-                                  : `Query ${index + 1}...`
-                              }
-                              className={`min-h-[36px] max-h-[72px] resize-none shadow-none focus-visible:ring-1 focus-visible:ring-ring text-xs ${
-                                queryInputs.length === 1
-                                  ? "border-0 bg-transparent p-0 placeholder:text-muted-foreground focus-visible:ring-0"
-                                  : `border border-border/50 rounded-md bg-background/60 backdrop-blur-sm p-2 ${queryInputs.length > 1 ? "pr-8" : ""}`
-                              }`}
-                              rows={1}
-                            />
+                            {swappingInputs.has(input.id) ? (
+                              // Show loading while swapping in manual mode (no skeleton, just disabled)
+                              <Textarea
+                                value={input.text}
+                                disabled
+                                className={`min-h-[36px] max-h-[72px] resize-none shadow-none text-xs opacity-50 ${
+                                  queryInputs.length === 1
+                                    ? "border-0 bg-transparent p-0"
+                                    : `border border-border/50 rounded-md bg-background/60 backdrop-blur-sm p-2`
+                                }`}
+                                rows={1}
+                              />
+                            ) : (
+                              <Textarea
+                                ref={index === 0 ? textareaRef : undefined}
+                                value={input.text}
+                                onChange={(e) => onUpdateQueryInput(input.id, e.target.value)}
+                                onKeyDown={(e) => onKeyDown(e, input.id)}
+                                placeholder={
+                                  index === 0
+                                    ? queryMode === "auto"
+                                      ? "Describe what you want to analyze in your case files..."
+                                      : "Ask a question about your case files..."
+                                    : `Query ${index + 1}...`
+                                }
+                                className={`min-h-[36px] max-h-[72px] resize-none shadow-none focus-visible:ring-1 focus-visible:ring-ring text-xs ${
+                                  queryInputs.length === 1
+                                    ? "border-0 bg-transparent p-0 placeholder:text-muted-foreground focus-visible:ring-0"
+                                    : `border border-border/50 rounded-md bg-background/60 backdrop-blur-sm p-2`
+                                }`}
+                                rows={1}
+                              />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {/* Show swap/undo buttons for manual mode */}
+                            {queryMode === "manual" && input.text.trim() && (
+                              <>
+                                {swappedInputs.has(input.id) && previousInputs.has(input.id) ? (
+                                  // Show undo and retry buttons after swap
+                                  <>
+                                    <Button
+                                      onClick={() => onUndoInputSwap?.(input.id)}
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-muted-foreground"
+                                      title="Undo swap"
+                                      disabled={swappingInputs.has(input.id)}
+                                    >
+                                      <Undo className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      onClick={() => onSwapInputQuery?.(input.id)}
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-muted-foreground"
+                                      title="Generate another"
+                                      disabled={swappingInputs.has(input.id)}
+                                    >
+                                      <RefreshCw className="h-3 w-3" />
+                                    </Button>
+                                  </>
+                                ) : (
+                                  // Show swap button initially
+                                  <Button
+                                    onClick={() => onSwapInputQuery?.(input.id)}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-muted-foreground"
+                                    title="Swap query"
+                                    disabled={swappingInputs.has(input.id)}
+                                  >
+                                    <RefreshCw className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                            {/* Remove button for multiple queries */}
                             {queryInputs.length > 1 && (
                               <Button
                                 onClick={() => onRemoveQueryInput(input.id)}
                                 variant="ghost"
                                 size="sm"
-                                className="absolute right-1.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/80 opacity-70 group-hover:opacity-100 transition-all duration-200"
+                                className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-destructive"
+                                title="Remove query"
                               >
-                                <X className="h-2.5 w-2.5" />
+                                <X className="h-3 w-3" />
                               </Button>
                             )}
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {/* Voice input for first query */}
                             {index === 0 && queryInputs.length === 1 && (
                               <Button
                                 variant="ghost"
@@ -450,20 +523,34 @@ export function BottomBar({
                 </div>
 
                 <div className="mt-1.5 pt-1.5 border-t border-border">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={() => onSetQueryMode(queryMode === "auto" ? "manual" : "auto")}
-                      variant="outline"
-                      size="sm"
-                      className="h-5 px-2 text-xs bg-transparent border-muted-foreground/30 hover:bg-muted/50"
-                    >
-                      {queryMode === "auto" ? "Auto" : "Manual"}
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                      {queryMode === "auto"
-                        ? "Press Enter to submit, Shift + Enter for manual mode"
-                        : "Press Shift + Enter for new query, Enter to submit"}
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => onSetQueryMode(queryMode === "auto" ? "manual" : "auto")}
+                        variant="outline"
+                        size="sm"
+                        className="h-5 px-2 text-xs bg-transparent border-muted-foreground/30 hover:bg-muted/50"
+                      >
+                        {queryMode === "auto" ? "Auto" : "Manual"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        {queryMode === "auto"
+                          ? "Press Enter to submit, Shift + Enter for manual mode"
+                          : "Press Shift + Enter for new query, Enter to submit"}
+                      </p>
+                    </div>
+                    {/* Add query button for manual mode */}
+                    {queryMode === "manual" && (
+                      <Button
+                        onClick={onAddQueryInput}
+                        variant="outline"
+                        size="sm"
+                        className="h-5 px-2 text-xs bg-transparent border-muted-foreground/30 hover:bg-muted/50"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add query
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

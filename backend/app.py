@@ -473,13 +473,13 @@ Recommendations:
 This analysis synthesizes {len(queries)} separate queries to provide a comprehensive overview of the document's legal implications."""
         else:
             # Use real LLM
+            from services.query_engine import MODEL_CONFIG
             response = query_engine.client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model=MODEL_CONFIG['analysis'],  # Using GPT-5-chat-latest for combined analysis
                 messages=[
                     {"role": "system", "content": "You are a legal document analysis expert specializing in comprehensive document review."},
                     {"role": "user", "content": combined_prompt}
                 ],
-                temperature=0.3,
                 max_completion_tokens=800
             )
             result = response.choices[0].message.content

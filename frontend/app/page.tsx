@@ -100,6 +100,10 @@ const LegalCaseAnalysis = () => {
   const [swappedQueries, setSwappedQueries] = useState<Set<string>>(new Set())
   const [previousQueries, setPreviousQueries] = useState<Map<string, string>>(new Map())
   const [userContext, setUserContext] = useState<string>("")
+  // Manual mode swap states
+  const [swappingInputs, setSwappingInputs] = useState<Set<string>>(new Set())
+  const [swappedInputs, setSwappedInputs] = useState<Set<string>>(new Set())
+  const [previousInputs, setPreviousInputs] = useState<Map<string, string>>(new Map())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
@@ -277,7 +281,7 @@ const LegalCaseAnalysis = () => {
   }
 
   useEffect(() => {
-    const text = "Welcome back, Counselor Gupta"
+    const text = "Welcome to OpenJustice, Counselor Lindquist"
     let index = 0
 
     const timer = setInterval(() => {
@@ -429,14 +433,13 @@ const LegalCaseAnalysis = () => {
   const handleKeyDown = (e: React.KeyboardEvent, inputId: string) => {
     if (e.key === "Enter" && e.shiftKey) {
       e.preventDefault()
-      if (queryInputs.length < 2) {
-        const newInput: QueryInput = {
-          id: Math.random().toString(36).substr(2, 9),
-          text: "",
-        }
-        setQueryInputs((prev) => [...prev, newInput])
-        setQueryMode("manual")
+      // Remove the 2-query limit for manual mode
+      const newInput: QueryInput = {
+        id: Math.random().toString(36).substr(2, 9),
+        text: "",
       }
+      setQueryInputs((prev) => [...prev, newInput])
+      setQueryMode("manual")
     } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSubmitQuery(inputId)
@@ -805,10 +808,96 @@ const LegalCaseAnalysis = () => {
   const removeQueryInput = (inputId: string) => {
     if (queryInputs.length > 1) {
       setQueryInputs((prev) => prev.filter((input) => input.id !== inputId))
-      if (queryInputs.length === 2) {
-        setQueryMode("auto")
-      }
+      // Remove auto mode switch when going back to 1 query
     }
+  }
+  
+  const addQueryInput = () => {
+    const newInput: QueryInput = {
+      id: Math.random().toString(36).substr(2, 9),
+      text: "",
+    }
+    setQueryInputs((prev) => [...prev, newInput])
+    setQueryMode("manual")
+  }
+  
+  const handleSwapInputQuery = async (inputId: string) => {
+    const input = queryInputs.find(q => q.id === inputId)
+    if (!input || !input.text.trim()) return
+    
+    // Store previous text for undo
+    setPreviousInputs(prev => new Map(prev).set(inputId, input.text))
+    
+    // Mark as swapping
+    setSwappingInputs(prev => new Set(prev).add(inputId))
+    
+    try {
+      // Get all current query texts except the one being swapped
+      const existingQueries = queryInputs
+        .filter(q => q.id !== inputId && q.text.trim())
+        .map(q => q.text)
+      
+      // Use the first non-empty query as context if no userContext is set
+      const context = userContext || queryInputs.find(q => q.text.trim())?.text || "legal document analysis"
+      
+      // Call API to get replacement
+      const result = await swapQuery(input.text, context, existingQueries)
+      
+      if (result.success && result.query) {
+        // Update the input with new text
+        setQueryInputs(prev => 
+          prev.map(q => q.id === inputId ? { ...q, text: result.query } : q)
+        )
+        
+        // Mark as swapped
+        setSwappedInputs(prev => new Set(prev).add(inputId))
+        
+        toast({
+          title: "Query swapped",
+          description: "Generated a new question successfully.",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to generate replacement query. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      // Remove from swapping state
+      setSwappingInputs(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(inputId)
+        return newSet
+      })
+    }
+  }
+  
+  const handleUndoInputSwap = (inputId: string) => {
+    const previousText = previousInputs.get(inputId)
+    if (!previousText) return
+    
+    // Restore previous text
+    setQueryInputs(prev => 
+      prev.map(q => q.id === inputId ? { ...q, text: previousText } : q)
+    )
+    
+    // Remove from swapped state and previous inputs
+    setSwappedInputs(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(inputId)
+      return newSet
+    })
+    setPreviousInputs(prev => {
+      const newMap = new Map(prev)
+      newMap.delete(inputId)
+      return newMap
+    })
+    
+    toast({
+      title: "Query restored",
+      description: "Reverted to the original question.",
+    })
   }
 
   const updateExtractedQuery = (queryId: string, text: string) => {
@@ -1397,10 +1486,14 @@ const LegalCaseAnalysis = () => {
             swappingQueries={swappingQueries}
             swappedQueries={swappedQueries}
             previousQueries={previousQueries}
+            swappingInputs={swappingInputs}
+            swappedInputs={swappedInputs}
+            previousInputs={previousInputs}
             onRemoveFile={removeFile}
             onAddFile={() => fileInputRef.current?.click()}
             onUpdateQueryInput={updateQueryInput}
             onRemoveQueryInput={removeQueryInput}
+            onAddQueryInput={addQueryInput}
             onUpdateExtractedQuery={updateExtractedQuery}
             onRemoveExtractedQuery={removeExtractedQuery}
             onAddExtractedQuery={addExtractedQuery}
@@ -1413,6 +1506,8 @@ const LegalCaseAnalysis = () => {
             onVoiceInput={handleVoiceInput}
             onSwapQuery={handleSwapQuery}
             onUndoSwap={handleUndoSwap}
+            onSwapInputQuery={handleSwapInputQuery}
+            onUndoInputSwap={handleUndoInputSwap}
           />
 
           <input

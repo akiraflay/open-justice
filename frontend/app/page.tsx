@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
+import { formatResponseAsHtml } from "@/lib/response-formatter"
 import Sidebar from "@/components/sidebar"
 import { FavoritesModal } from "@/components/favorites-modal"
 import { BottomBar } from "@/components/bottom-bar"
@@ -196,56 +197,33 @@ const LegalCaseAnalysis = () => {
     if (status === "pending") return (
       <div className="flex items-center gap-2 ml-auto">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-pulse" />
-          <span className="text-caption animate-pulse">Queued for analysis...</span>
+          <div className="w-2 h-2 bg-muted-foreground/40 rounded-full" />
+          <span className="text-caption text-muted-foreground">Waiting...</span>
         </div>
       </div>
     )
     
     if (status === "completed" && !isRetrying) return null
 
-    // Determine if we're in hallucination detection/retry mode
-    const isHallucinationMode = status === "anti-hallucination" || status === "retrying" || (attempt && attempt !== "1/3")
-    
-    // For normal flow, show smooth progress (0-66% for generation, 66-100% for verification)
-    // For hallucination retries, show stepped progress with attempt counter
-    const displayProgress = isHallucinationMode ? progress : (
-      status === "verifying" ? Math.min(66 + (progress / 100 * 34), 100) : 
-      Math.min(progress * 0.66, 66)
-    )
+    // Simplify to just show progress
+    const displayProgress = Math.min(progress, 100)
 
     return (
       <div className="flex items-center gap-2 ml-auto">
-        <div className="flex flex-col items-end">
-          {message && (
-            <span className={`text-xs mb-1 ${isHallucinationMode ? 'text-amber-600' : 'text-muted-foreground'}`}>
-              {message}
-            </span>
-          )}
-          <div className="flex items-center gap-2">
-            {isHallucinationMode && attempt && (
-              <span className="text-xs font-mono text-amber-600">{attempt}</span>
-            )}
-            <div className="w-20 h-2 bg-muted/30 rounded-full overflow-hidden relative">
-              <div 
-                className={`h-full transition-all duration-700 ease-out relative ${
-                  isHallucinationMode ? 'bg-gradient-to-r from-amber-400 to-amber-600' : 'bg-gradient-to-r from-primary/80 to-primary'
-                }`} 
-                style={{ width: `${displayProgress}%` }}
-              >
-                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+        <div className="flex items-center gap-2">
+          {status === "processing" ? (
+            <>
+              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <span className="text-caption text-muted-foreground">Processing...</span>
+            </>
+          ) : (
+            <>
+              <div className="w-12 h-1 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${displayProgress}%` }} />
               </div>
-              {/* Shimmer effect */}
-              <div 
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-100%] animate-[shimmer_1.5s_infinite]"
-              />
-            </div>
-            <span className={`text-xs font-mono min-w-[32px] ${
-              isHallucinationMode ? 'text-amber-600' : 'text-muted-foreground'
-            }`}>
-              {Math.round(displayProgress)}%
-            </span>
-          </div>
+              <span className="text-caption text-muted-foreground min-w-[3ch]">{Math.round(displayProgress)}%</span>
+            </>
+          )}
         </div>
       </div>
     )
@@ -1573,7 +1551,7 @@ const LegalCaseAnalysis = () => {
                                 </div>
 
                                 {expandedQueries.has(query.id) && (
-                                  <div className="space-y-1.5" role="region" aria-label="Query results">
+                                  <div className="mt-3 space-y-2" role="region" aria-label="Query results">
                                   {query.fileResults?.map((fileResult) => (
                                     <Card 
                                       key={fileResult.fileId} 
@@ -1590,55 +1568,19 @@ const LegalCaseAnalysis = () => {
                                           uploadedFiles.find((f) => f.id === fileResult.fileId)?.transcriptionProgress,
                                         )}
                                         <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <h4 className="text-hierarchy-4 truncate">{fileResult.fileName}</h4>
+                                          <div className="flex items-center gap-2 mb-2">
+                                            <h4 className="font-medium text-sm truncate">{fileResult.fileName}</h4>
                                             <Badge variant="outline" className="text-xs px-1 py-0">
                                               {uploadedFiles.find((f) => f.id === fileResult.fileId)?.size}
                                             </Badge>
                                           </div>
 
-                                          {fileResult.status === "pending" && (
-                                            <div className="flex items-center gap-2 text-muted-foreground py-1">
-                                              <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-pulse"></div>
-                                              <span className="text-caption">Queued for analysis...</span>
-                                            </div>
-                                          )}
-
-                                          {fileResult.status === "processing" && (
-                                            <div className="flex items-center gap-3 text-muted-foreground py-1">
-                                              <div className="flex gap-1">
-                                                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
-                                                <div
-                                                  className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
-                                                  style={{ animationDelay: "0.1s" }}
-                                                ></div>
-                                                <div
-                                                  className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"
-                                                  style={{ animationDelay: "0.2s" }}
-                                                ></div>
-                                              </div>
-                                              <span className="text-caption">Analyzing document...</span>
-                                            </div>
-                                          )}
-
-                                          {fileResult.status === "anti-hallucination" && (
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                              <div className="flex gap-0.5">
-                                                <div className="w-1.5 h-1.5 bg-orange-500/60 rounded-full animate-pulse"></div>
-                                                <div
-                                                  className="w-1.5 h-1.5 bg-orange-500/60 rounded-full animate-pulse"
-                                                  style={{ animationDelay: "0.2s" }}
-                                                ></div>
-                                              </div>
-                                              <span className="text-xs">Verifying accuracy...</span>
-                                            </div>
-                                          )}
-
                                           {fileResult.status === "completed" && (
-                                            <div className="mt-2 p-3 bg-muted/20 rounded-md border-l-2 border-primary/50">
-                                              <p className="text-body leading-relaxed">
-                                                {fileResult.result}
-                                              </p>
+                                            <div className="mt-3 p-4 bg-muted/20 rounded-md border-l-2 border-primary/50">
+                                              <div 
+                                                className="text-body leading-relaxed prose prose-sm max-w-none"
+                                                dangerouslySetInnerHTML={{ __html: formatResponseAsHtml(fileResult.result) }}
+                                              />
                                             </div>
                                           )}
                                         </div>

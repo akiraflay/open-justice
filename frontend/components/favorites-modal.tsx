@@ -6,9 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
-import { Search, Star, Plus, Trash2, Heart } from "lucide-react"
+import { Search, X } from "lucide-react"
 
 interface FavoriteQuery {
   id: string
@@ -71,20 +69,22 @@ const mockFavorites: FavoriteQuery[] = [
   },
 ]
 
-const categories = ["All", "Evidence", "Procedure", "Precedents", "Analysis"]
+const categories = ["Evidence", "Procedure", "Precedents", "Analysis"]
 
 export function FavoritesModal({ isOpen, onClose, onSelectQuery, currentQuery = "" }: FavoritesModalProps) {
+  const [activeTab, setActiveTab] = useState<'browse' | 'add'>('browse')
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("All")
+  const [selectedCategory, setSelectedCategory] = useState("")
   const [newFavoriteTitle, setNewFavoriteTitle] = useState("")
   const [newFavoriteCategory, setNewFavoriteCategory] = useState("Evidence")
   const [favorites, setFavorites] = useState<FavoriteQuery[]>(mockFavorites)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
 
   const filteredFavorites = favorites.filter((fav) => {
     const matchesSearch =
       fav.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       fav.query.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = selectedCategory === "All" || fav.category === selectedCategory
+    const matchesCategory = selectedCategory === "" || fav.category === selectedCategory
     return matchesSearch && matchesCategory
   })
 
@@ -107,148 +107,149 @@ export function FavoritesModal({ isOpen, onClose, onSelectQuery, currentQuery = 
     setFavorites((prev) => [newFavorite, ...prev])
     setNewFavoriteTitle("")
     setNewFavoriteCategory("Evidence")
+    setActiveTab('browse')
   }
 
-  const handleDeleteFavorite = (id: string) => {
+  const handleDeleteFavorite = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
     setFavorites((prev) => prev.filter((fav) => fav.id !== id))
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] bg-card border-border">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
-            <Heart className="h-5 w-5 text-primary" />
-            Favorite Queries
-          </DialogTitle>
+      <DialogContent className="max-w-2xl max-h-[85vh] p-0 gap-0 border-border/50">
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <DialogTitle className="text-base font-normal">Favorite Queries</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
-          {/* Browse Favorites Section */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="space-y-3">
-              <h3 className="text-lg font-medium text-foreground">Browse Favorites</h3>
+        {/* Minimal Tab Navigation */}
+        <div className="flex px-6 pb-4 gap-6 border-b border-border/30">
+          <button
+            onClick={() => setActiveTab('browse')}
+            className={`pb-2 text-sm transition-all ${
+              activeTab === 'browse'
+                ? 'text-foreground border-b-2 border-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Browse
+          </button>
+          <button
+            onClick={() => setActiveTab('add')}
+            className={`pb-2 text-sm transition-all ${
+              activeTab === 'add'
+                ? 'text-foreground border-b-2 border-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Add New
+          </button>
+        </div>
 
-              {/* Search and Filter */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search favorites..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-input border-border text-foreground"
-                  />
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {categories.map((category) => (
-                    <Button
-                      key={category}
-                      variant={selectedCategory === category ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSelectedCategory(category)}
-                      className={
-                        selectedCategory === category
-                          ? "bg-primary text-primary-foreground"
-                          : "border-border text-muted-foreground hover:text-foreground"
-                      }
-                    >
-                      {category}
-                    </Button>
-                  ))}
-                </div>
+        <div className="px-6 py-4">
+          {activeTab === 'browse' ? (
+            <div className="space-y-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
+                <Input
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 h-9 text-sm border-border/50 focus:border-border"
+                />
               </div>
-            </div>
 
-            {/* Favorites List */}
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-3">
-                {filteredFavorites.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Star className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No favorites found matching your criteria.</p>
-                  </div>
-                ) : (
-                  filteredFavorites.map((favorite) => (
-                    <div
-                      key={favorite.id}
-                      className="p-4 rounded-lg border border-border bg-card/50 hover:bg-card transition-colors group"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h4 className="font-medium text-foreground truncate">{favorite.title}</h4>
-                            <Badge variant="secondary" className="text-xs bg-secondary/50 text-secondary-foreground">
-                              {favorite.category}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{favorite.query}</p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">Added {favorite.createdAt}</span>
-                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button
-                                size="sm"
-                                onClick={() => handleSelectQuery(favorite.query)}
-                                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                              >
-                                Use Query
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDeleteFavorite(favorite.id)}
-                                className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+              {/* Minimal Category Pills */}
+              <div className="flex gap-3 text-xs">
+                {categories.map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(selectedCategory === category ? "" : category)}
+                    className={`transition-colors ${
+                      selectedCategory === category
+                        ? 'text-foreground font-medium'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+
+              {/* Simplified Favorites List */}
+              <ScrollArea className="h-[380px] -mx-6 px-6">
+                <div className="space-y-1">
+                  {filteredFavorites.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <p className="text-sm">No favorites found</p>
+                    </div>
+                  ) : (
+                    filteredFavorites.map((favorite) => (
+                      <div
+                        key={favorite.id}
+                        onClick={() => handleSelectQuery(favorite.query)}
+                        onMouseEnter={() => setHoveredId(favorite.id)}
+                        onMouseLeave={() => setHoveredId(null)}
+                        className="py-3 px-3 -mx-3 rounded cursor-pointer transition-colors hover:bg-muted/50 group relative"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <h4 className="text-sm font-normal text-foreground">
+                                {favorite.title}
+                              </h4>
+                              <span className="text-xs px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground">
+                                {favorite.category}
+                              </span>
                             </div>
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {favorite.query}
+                            </p>
                           </div>
+                          {hoveredId === favorite.id && (
+                            <button
+                              onClick={(e) => handleDeleteFavorite(favorite.id, e)}
+                              className="ml-2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-
-          {/* Add to Favorites Section */}
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <h3 className="text-lg font-medium text-foreground">Add to Favorites</h3>
-
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+          ) : (
+            <div className="space-y-5 py-2">
               {currentQuery ? (
-                <div className="space-y-4">
-                  <div className="p-3 rounded-lg bg-muted/20 border border-border">
-                    <Label className="text-sm font-medium text-foreground mb-2 block">Current Query</Label>
-                    <p className="text-sm text-muted-foreground line-clamp-3">{currentQuery}</p>
+                <>
+                  <div>
+                    <Label className="text-xs text-muted-foreground font-normal">Current Query</Label>
+                    <p className="text-sm mt-2 text-foreground/90">{currentQuery}</p>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div>
-                      <Label htmlFor="favorite-title" className="text-sm font-medium text-foreground">
-                        Favorite Title
-                      </Label>
                       <Input
                         id="favorite-title"
-                        placeholder="Enter a descriptive title..."
+                        placeholder="Title"
                         value={newFavoriteTitle}
                         onChange={(e) => setNewFavoriteTitle(e.target.value)}
-                        className="mt-1 bg-input border-border text-foreground"
+                        className="h-9 text-sm border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-b-foreground"
                       />
                     </div>
 
                     <div>
-                      <Label htmlFor="favorite-category" className="text-sm font-medium text-foreground">
-                        Category
-                      </Label>
                       <select
                         id="favorite-category"
                         value={newFavoriteCategory}
                         onChange={(e) => setNewFavoriteCategory(e.target.value)}
-                        className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-input text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        className="w-full h-9 text-sm border-0 border-b border-border/50 bg-transparent px-0 focus:outline-none focus:border-foreground cursor-pointer"
                       >
-                        {categories.slice(1).map((category) => (
+                        {categories.map((category) => (
                           <option key={category} value={category}>
                             {category}
                           </option>
@@ -259,30 +260,26 @@ export function FavoritesModal({ isOpen, onClose, onSelectQuery, currentQuery = 
                     <Button
                       onClick={handleAddToFavorites}
                       disabled={!newFavoriteTitle.trim()}
-                      className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      className="w-full h-9 text-sm font-normal"
                     >
-                      <Plus className="h-4 w-4 mr-2" />
                       Add to Favorites
                     </Button>
                   </div>
-                </div>
+                </>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Plus className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Enter a query to add it to favorites.</p>
+                <div className="text-center py-12 text-muted-foreground">
+                  <p className="text-sm">Enter a query to add it to favorites</p>
                 </div>
               )}
             </div>
-          </div>
+          )}
         </div>
 
-        <Separator className="bg-border" />
-
-        <div className="flex justify-end gap-3">
-          <Button
-            variant="outline"
+        <div className="flex justify-end px-6 py-4 border-t border-border/30">
+          <Button 
+            variant="ghost" 
             onClick={onClose}
-            className="border-border text-foreground hover:bg-muted bg-transparent"
+            className="h-8 text-sm font-normal"
           >
             Close
           </Button>

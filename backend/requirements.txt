@@ -1,0 +1,22 @@
+# Core Flask dependencies
+Flask==3.0.0
+Flask-CORS==4.0.0
+Werkzeug==3.0.1
+
+# Document processing
+PyPDF2==3.0.1
+
+# LLM integration
+openai>=1.0.0
+
+# Session storage
+redis==5.0.1
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Optional: For production deployment
+gunicorn==21.2.0
+
+# Optional: For development
+python-dateutil==2.8.2

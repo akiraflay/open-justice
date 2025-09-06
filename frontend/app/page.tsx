@@ -142,6 +142,7 @@ const LegalCaseAnalysis = () => {
         title: "Deletion failed",
         description: "Failed to delete the file. Please try again.",
         variant: "destructive",
+        duration: 1000,
       })
     }
   }
@@ -173,6 +174,7 @@ const LegalCaseAnalysis = () => {
         title: "API Connection Error",
         description: "Failed to connect to AI service. Using fallback mode.",
         variant: "destructive",
+        duration: 1000,
       })
       
       // Return mock queries as fallback
@@ -612,6 +614,7 @@ const LegalCaseAnalysis = () => {
         title: "No files uploaded",
         description: "Please upload case files before submitting queries.",
         variant: "destructive",
+        duration: 1000,
       })
       return
     }
@@ -733,6 +736,7 @@ const LegalCaseAnalysis = () => {
               title: "Hallucination detected",
               description: `Rerunning query (Attempt ${attemptNumber})`,
               className: "bg-amber-50 border-amber-200",
+              duration: 1000,
             })
           }
           
@@ -822,6 +826,7 @@ const LegalCaseAnalysis = () => {
     toast({
       title: "All queries processed",
       description: `Completed ${validQueries.length} queries with verification.`,
+      duration: 1000,
     })
   }
 
@@ -869,6 +874,7 @@ const LegalCaseAnalysis = () => {
               title: "Hallucination detected",
               description: `Rerunning query (Attempt ${attemptNumber})`,
               className: "bg-amber-50 border-amber-200",
+              duration: 1000,
             })
           }
           
@@ -932,6 +938,7 @@ const LegalCaseAnalysis = () => {
           toast({
             title: "Query processed",
             description: `Analysis complete with ${(result.confidence * 100).toFixed(0)}% confidence.`,
+            duration: 1000,
           })
         },
         // onError callback
@@ -958,6 +965,7 @@ const LegalCaseAnalysis = () => {
             title: "Processing failed",
             description: error,
             variant: "destructive",
+            duration: 1000,
           })
         }
       )
@@ -1024,6 +1032,7 @@ const LegalCaseAnalysis = () => {
         toast({
           title: "Query swapped",
           description: "Generated a new question successfully.",
+          duration: 1000,
         })
       }
     } catch (error) {
@@ -1031,6 +1040,7 @@ const LegalCaseAnalysis = () => {
         title: "Error",
         description: "Failed to generate replacement query. Please try again.",
         variant: "destructive",
+        duration: 1000,
       })
     } finally {
       // Remove from swapping state
@@ -1066,6 +1076,7 @@ const LegalCaseAnalysis = () => {
     toast({
       title: "Query restored",
       description: "Reverted to the original question.",
+      duration: 1000,
     })
   }
 
@@ -1108,6 +1119,7 @@ const LegalCaseAnalysis = () => {
         toast({
           title: "Query swapped",
           description: "Generated a new question successfully.",
+          duration: 1000,
         })
       }
     } catch (error) {
@@ -1115,6 +1127,7 @@ const LegalCaseAnalysis = () => {
         title: "Error",
         description: "Failed to generate replacement query. Please try again.",
         variant: "destructive",
+        duration: 1000,
       })
     } finally {
       // Remove from swapping state
@@ -1150,6 +1163,7 @@ const LegalCaseAnalysis = () => {
     toast({
       title: "Query restored",
       description: "Reverted to the original question.",
+      duration: 1000,
     })
   }
 
@@ -1265,6 +1279,7 @@ const LegalCaseAnalysis = () => {
           toast({
             title: "Combined Analysis Complete",
             description: `Generated comprehensive analysis for ${response.file_name} covering ${response.query_count} queries.`,
+            duration: 1000,
           })
         } else {
           throw new Error(response.error || "Analysis failed")
@@ -1317,6 +1332,7 @@ const LegalCaseAnalysis = () => {
           title: errorTitle,
           description: errorDescription,
           variant: "destructive",
+          duration: 1000,
         })
       } finally {
         setProcessingSourceIds((prev) => {

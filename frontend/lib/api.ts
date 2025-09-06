@@ -102,6 +102,32 @@ export async function extractQueries(text: string): Promise<ExtractQueriesRespon
   return handleResponse<ExtractQueriesResponse>(response)
 }
 
+// Swap a query with a contextually similar replacement
+export async function swapQuery(
+  originalQuery: string,
+  userContext: string,
+  existingQueries: string[]
+): Promise<{ success: boolean; query: string }> {
+  const response = await fetchWithRetry(
+    '/api/swap-query',
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        original_query: originalQuery,
+        user_context: userContext,
+        existing_queries: existingQueries
+      }),
+    },
+    2
+  )
+  
+  return handleResponse<{ success: boolean; query: string }>(response)
+}
+
 // Process a query against documents
 export async function processQuery(queryText: string): Promise<ProcessQueryResponse> {
   const response = await fetchWithRetry(

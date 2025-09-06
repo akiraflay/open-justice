@@ -18,7 +18,8 @@ import {
   deleteFile as deleteFileAPI,
   processQuery,
   streamQuery,
-  generateCombinedAnalysis as generateCombinedAnalysisAPI
+  generateCombinedAnalysis as generateCombinedAnalysisAPI,
+  swapQuery
 } from "@/lib/api"
 import {
   Upload,
@@ -95,6 +96,10 @@ const LegalCaseAnalysis = () => {
   const [extractedQueries, setExtractedQueries] = useState<ExtractedQuery[]>([])
   const [displayedText, setDisplayedText] = useState("")
   const [recordingState, setRecordingState] = useState<RecordingState>("idle")
+  const [swappingQueries, setSwappingQueries] = useState<Set<string>>(new Set())
+  const [swappedQueries, setSwappedQueries] = useState<Set<string>>(new Set())
+  const [previousQueries, setPreviousQueries] = useState<Map<string, string>>(new Map())
+  const [userContext, setUserContext] = useState<string>("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
@@ -443,6 +448,9 @@ const LegalCaseAnalysis = () => {
       if (queryMode === "auto" && queryInputs.length === 1) {
         const inputText = queryInputs[0].text.trim()
         if (inputText) {
+          // Store user context for swap functionality
+          setUserContext(inputText)
+          
           // Show loading state while extracting
           setQueryState("extracted")
           setExtractedQueries([])
@@ -809,6 +817,82 @@ const LegalCaseAnalysis = () => {
 
   const removeExtractedQuery = (queryId: string) => {
     setExtractedQueries((prev) => prev.filter((q) => q.id !== queryId))
+  }
+
+  const handleSwapQuery = async (queryId: string) => {
+    const query = extractedQueries.find(q => q.id === queryId)
+    if (!query) return
+    
+    // Store previous query text for undo
+    setPreviousQueries(prev => new Map(prev).set(queryId, query.text))
+    
+    // Mark as swapping
+    setSwappingQueries(prev => new Set(prev).add(queryId))
+    
+    try {
+      // Get all current query texts except the one being swapped
+      const existingQueries = extractedQueries
+        .filter(q => q.id !== queryId)
+        .map(q => q.text)
+      
+      // Call API to get replacement
+      const result = await swapQuery(query.text, userContext, existingQueries)
+      
+      if (result.success && result.query) {
+        // Update the query with new text
+        setExtractedQueries(prev => 
+          prev.map(q => q.id === queryId ? { ...q, text: result.query } : q)
+        )
+        
+        // Mark as swapped
+        setSwappedQueries(prev => new Set(prev).add(queryId))
+        
+        toast({
+          title: "Query swapped",
+          description: "Generated a new question successfully.",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to generate replacement query. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      // Remove from swapping state
+      setSwappingQueries(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(queryId)
+        return newSet
+      })
+    }
+  }
+  
+  const handleUndoSwap = (queryId: string) => {
+    const previousText = previousQueries.get(queryId)
+    if (!previousText) return
+    
+    // Restore previous text
+    setExtractedQueries(prev => 
+      prev.map(q => q.id === queryId ? { ...q, text: previousText } : q)
+    )
+    
+    // Remove from swapped state and previous queries
+    setSwappedQueries(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(queryId)
+      return newSet
+    })
+    setPreviousQueries(prev => {
+      const newMap = new Map(prev)
+      newMap.delete(queryId)
+      return newMap
+    })
+    
+    toast({
+      title: "Query restored",
+      description: "Reverted to the original question.",
+    })
   }
 
   const handleSelectFromFavorites = (query: string) => {
@@ -1310,6 +1394,9 @@ const LegalCaseAnalysis = () => {
             fileInputRef={fileInputRef}
             textareaRef={textareaRef}
             favoritesModalOpen={favoritesModalOpen}
+            swappingQueries={swappingQueries}
+            swappedQueries={swappedQueries}
+            previousQueries={previousQueries}
             onRemoveFile={removeFile}
             onAddFile={() => fileInputRef.current?.click()}
             onUpdateQueryInput={updateQueryInput}
@@ -1324,6 +1411,8 @@ const LegalCaseAnalysis = () => {
             onSetQueryMode={setQueryMode}
             onSetFavoritesModalOpen={setFavoritesModalOpen}
             onVoiceInput={handleVoiceInput}
+            onSwapQuery={handleSwapQuery}
+            onUndoSwap={handleUndoSwap}
           />
 
           <input

@@ -190,6 +190,34 @@ def extract_queries():
         print(f"Error extracting queries: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/swap-query', methods=['POST'])
+def swap_query():
+    """Generate a replacement query that's contextually similar but different"""
+    data = request.json
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    original_query = data.get('original_query', '')
+    user_context = data.get('user_context', '')
+    existing_queries = data.get('existing_queries', [])
+    
+    if not original_query:
+        return jsonify({'error': 'No original query provided'}), 400
+    
+    try:
+        # Use the query engine to generate a replacement query
+        new_query = query_engine.swap_query(original_query, user_context, existing_queries)
+        
+        return jsonify({
+            'success': True,
+            'query': new_query
+        })
+        
+    except Exception as e:
+        print(f"Error swapping query: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/query', methods=['POST'])
 def process_query():
     """Process a query against uploaded documents"""

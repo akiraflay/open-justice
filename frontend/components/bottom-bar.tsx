@@ -1,11 +1,11 @@
 "use client"
 
-import React, { RefObject } from "react"
+import React, { RefObject, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, X, Send, Mic } from "lucide-react"
+import { Plus, X, Send, Mic, RefreshCw, Undo } from "lucide-react"
 
 interface UploadedFile {
   id: string
@@ -40,6 +40,11 @@ interface BottomBarProps {
   textareaRef?: RefObject<HTMLTextAreaElement>
   favoritesModalOpen: boolean
   
+  // Swap state
+  swappingQueries?: Set<string>
+  swappedQueries?: Set<string>
+  previousQueries?: Map<string, string>
+  
   // Handlers
   onRemoveFile: (fileId: string) => void
   onAddFile: () => void
@@ -55,6 +60,8 @@ interface BottomBarProps {
   onSetQueryMode: (mode: "auto" | "manual") => void
   onSetFavoritesModalOpen: (open: boolean) => void
   onVoiceInput: () => void
+  onSwapQuery?: (queryId: string) => void
+  onUndoSwap?: (queryId: string) => void
 }
 
 export function BottomBar({
@@ -67,6 +74,9 @@ export function BottomBar({
   recordingState,
   fileInputRef,
   textareaRef,
+  swappingQueries = new Set(),
+  swappedQueries = new Set(),
+  previousQueries = new Map(),
   onRemoveFile,
   onAddFile,
   onUpdateQueryInput,
@@ -81,7 +91,24 @@ export function BottomBar({
   onSetQueryMode,
   onSetFavoritesModalOpen,
   onVoiceInput,
+  onSwapQuery,
+  onUndoSwap,
 }: BottomBarProps) {
+  const [visibleQuestionCount, setVisibleQuestionCount] = useState(1)
+
+  useEffect(() => {
+    if (isExtractingQueries) {
+      setVisibleQuestionCount(1)
+      const timer = setInterval(() => {
+        setVisibleQuestionCount(prev => prev < 4 ? prev + 1 : prev)
+      }, 400)
+      return () => clearInterval(timer)
+    } else if (extractedQueries.length > 0) {
+      // Reset for smooth transition when showing actual queries
+      setVisibleQuestionCount(extractedQueries.length)
+    }
+  }, [isExtractingQueries, extractedQueries.length])
+
   const isTranscribableFile = (fileType: string) => {
     return fileType === "audio" || fileType === "video"
   }
@@ -120,7 +147,7 @@ export function BottomBar({
   }
 
   return (
-    <div className="flex-shrink-0 backdrop-blur-sm">
+    <div className="flex-shrink-0 bg-background/70 backdrop-blur-lg">
       <div className="p-2.5">
         <div className="max-w-4xl mx-auto">
           <div className="mb-1.5">
@@ -132,9 +159,9 @@ export function BottomBar({
                   className={`flex items-center gap-1 px-1.5 py-0.5 text-xs transition-colors ${
                     isTranscribableFile(file.type)
                       ? file.isTranscribing
-                        ? "bg-slate-600/70 hover:bg-slate-600/80 text-slate-200"
-                        : "bg-slate-500/50 hover:bg-slate-500/60 text-slate-300"
-                      : "bg-muted/50 hover:bg-muted/70"
+                        ? "bg-slate-600/60 hover:bg-slate-600/70 text-slate-200 backdrop-blur-sm"
+                        : "bg-slate-500/40 hover:bg-slate-500/50 text-slate-300 backdrop-blur-sm"
+                      : "bg-muted/40 hover:bg-muted/60 backdrop-blur-sm"
                   }`}
                 >
                   {getFileIcon(file.type, file.isTranscribing)}
@@ -154,7 +181,7 @@ export function BottomBar({
                 variant="ghost"
                 size="sm"
                 onClick={onAddFile}
-                className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-muted-foreground/30 rounded-md"
+                className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-muted-foreground/30 rounded-md backdrop-blur-sm bg-background/30"
               >
                 <Plus className="h-2.5 w-2.5 mr-0.5" />
                 Add
@@ -163,7 +190,7 @@ export function BottomBar({
           </div>
 
           {queryState === "extracted" ? (
-            <div className="bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-sm">
+            <div className="bg-card/80 backdrop-blur-md border border-border/50 rounded-xl shadow-sm">
               <div className="p-3">
                 <div className="mb-3">
                   <h3 className="text-sm font-semibold mb-1">Extracted Questions</h3>
@@ -172,11 +199,18 @@ export function BottomBar({
                   </p>
                 </div>
 
-                <div className="space-y-1 mb-3">
+                <div className="space-y-1 mb-3 transition-all duration-300">
                   {isExtractingQueries ? (
                     <>
-                      {[1, 2, 3, 4].map((index) => (
-                        <div key={`skeleton-${index}`} className="relative animate-pulse">
+                      {[1, 2, 3, 4].slice(0, visibleQuestionCount).map((index) => (
+                        <div 
+                          key={`skeleton-${index}`} 
+                          className="relative animate-pulse"
+                          style={{
+                            animation: `fadeIn 0.3s ease-in-out`,
+                            opacity: 1
+                          }}
+                        >
                           <div className="flex items-start gap-2">
                             <div className="text-xs text-muted-foreground/30 pt-1 min-w-0 flex-shrink-0">
                               Question {index}
@@ -195,28 +229,84 @@ export function BottomBar({
                       ))}
                     </>
                   ) : (
-                    extractedQueries.map((query) => (
-                      <div key={query.id} className="relative">
+                    extractedQueries.slice(0, visibleQuestionCount).map((query) => (
+                      <div 
+                        key={query.id} 
+                        className="relative"
+                        style={{
+                          animation: `fadeIn 0.3s ease-in-out`,
+                          opacity: 1
+                        }}
+                      >
                         <div className="flex items-start gap-2">
                           <div className="text-xs text-muted-foreground pt-1 min-w-0 flex-shrink-0">
                             Question {query.questionNumber}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <Textarea
-                              value={query.text}
-                              onChange={(e) => onUpdateExtractedQuery(query.id, e.target.value)}
-                              className="min-h-[40px] max-h-[80px] resize-none text-xs border-border/50 focus-visible:ring-1 focus-visible:ring-ring bg-background/50"
-                              rows={2}
-                            />
+                            {swappingQueries.has(query.id) ? (
+                              // Show skeleton while swapping
+                              <div className="min-h-[40px] rounded-md bg-muted/30 animate-pulse">
+                                <div className="p-2 space-y-2">
+                                  <div className="h-3 bg-muted/50 rounded w-full"></div>
+                                  <div className="h-3 bg-muted/50 rounded w-4/5"></div>
+                                </div>
+                              </div>
+                            ) : (
+                              <Textarea
+                                value={query.text}
+                                onChange={(e) => onUpdateExtractedQuery(query.id, e.target.value)}
+                                className="min-h-[40px] max-h-[80px] resize-none text-xs border-border/50 focus-visible:ring-1 focus-visible:ring-ring bg-background/60 backdrop-blur-sm"
+                                rows={2}
+                              />
+                            )}
                           </div>
-                          <Button
-                            onClick={() => onRemoveExtractedQuery(query.id)}
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-muted-foreground flex-shrink-0"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {swappedQueries.has(query.id) && previousQueries.has(query.id) ? (
+                              // Show undo and retry buttons after swap
+                              <>
+                                <Button
+                                  onClick={() => onUndoSwap?.(query.id)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-muted-foreground"
+                                  title="Undo swap"
+                                  disabled={swappingQueries.has(query.id)}
+                                >
+                                  <Undo className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  onClick={() => onSwapQuery?.(query.id)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-muted-foreground"
+                                  title="Generate another"
+                                  disabled={swappingQueries.has(query.id)}
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              // Show swap button initially
+                              <Button
+                                onClick={() => onSwapQuery?.(query.id)}
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-muted-foreground"
+                                title="Swap query"
+                                disabled={swappingQueries.has(query.id)}
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                              </Button>
+                            )}
+                            <Button
+                              onClick={() => onRemoveExtractedQuery(query.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-destructive flex-shrink-0"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -270,7 +360,7 @@ export function BottomBar({
               </div>
             </div>
           ) : (
-            <div className="bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-sm">
+            <div className="bg-card/80 backdrop-blur-md border border-border/50 rounded-xl shadow-sm">
               <div className="p-3">
                 <div className="space-y-2">
                   <ScrollArea className={queryInputs.length > 1 ? "max-h-[100px] w-full" : ""}>
@@ -293,7 +383,7 @@ export function BottomBar({
                               className={`min-h-[36px] max-h-[72px] resize-none shadow-none focus-visible:ring-1 focus-visible:ring-ring text-xs ${
                                 queryInputs.length === 1
                                   ? "border-0 bg-transparent p-0 placeholder:text-muted-foreground focus-visible:ring-0"
-                                  : `border border-border rounded-md bg-background p-2 ${queryInputs.length > 1 ? "pr-8" : ""}`
+                                  : `border border-border/50 rounded-md bg-background/60 backdrop-blur-sm p-2 ${queryInputs.length > 1 ? "pr-8" : ""}`
                               }`}
                               rows={1}
                             />

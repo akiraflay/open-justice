@@ -392,3 +392,69 @@ For full AI-powered analysis, please ensure the OpenAI API key is configured."""
         response = re.sub(r'(\d+\s+[A-Z]\.\d+\s+\d+)', r'_\1_', response)
         
         return response
+    
+    def swap_query(self, original_query: str, user_context: str, existing_queries: List[str]) -> str:
+        """Generate a contextually similar replacement query that avoids duplicates"""
+        
+        if self.use_mock:
+            # Mock response for testing
+            replacements = [
+                "What are the specific remedies and damages available if either party breaches the contract?",
+                "How are intellectual property rights allocated and protected under this agreement?",
+                "What are the dispute resolution procedures and governing law provisions?",
+                "Are there any warranties, representations, or indemnification clauses that affect liability?",
+                "What are the payment terms, conditions, and any penalties for late payment?",
+                "How can the contract be modified, amended, or assigned to third parties?"
+            ]
+            import random
+            new_query = random.choice([q for q in replacements if q not in existing_queries])
+            return new_query if new_query else "What are the key financial obligations in this agreement?"
+        
+        try:
+            # Prepare the prompt for generating a replacement query
+            existing_list = "\n".join([f"- {q}" for q in existing_queries])
+            
+            swap_prompt = f"""You are a legal document analysis assistant helping to generate alternative questions for legal document review.
+
+User's original request: "{user_context}"
+
+Current question to replace: "{original_query}"
+
+Already existing questions (DO NOT duplicate any of these):
+{existing_list}
+
+Generate ONE alternative legal question that:
+1. Is directly relevant to the user's original request about {user_context}
+2. Is distinctly different from the current question
+3. Does NOT duplicate any of the existing questions listed above
+4. Maintains a professional legal analysis focus
+5. Is specific and actionable for document analysis
+
+Return ONLY the new question text, no explanation or preamble."""
+
+            response = self.client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=[
+                    {"role": "system", "content": "You are a legal document analysis expert. Generate precise, relevant legal questions."},
+                    {"role": "user", "content": swap_prompt}
+                ],
+                temperature=0.7,  # Higher temperature for more variety
+                max_completion_tokens=100
+            )
+            
+            new_query = response.choices[0].message.content.strip()
+            
+            # Clean up the response - remove quotes if present
+            new_query = new_query.strip('"').strip("'")
+            
+            # Ensure it's not a duplicate
+            if new_query.lower() in [q.lower() for q in existing_queries]:
+                # If somehow we got a duplicate, generate a fallback
+                return f"What specific provisions relate to {user_context} that haven't been addressed yet?"
+            
+            return new_query
+            
+        except Exception as e:
+            print(f"Error in swap_query: {e}")
+            # Return a generic fallback question
+            return "What other important provisions should be reviewed in this document?"

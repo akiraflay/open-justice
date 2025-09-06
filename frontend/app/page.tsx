@@ -131,6 +131,7 @@ const LegalCaseAnalysis = () => {
         toast({
           title: "File removed",
           description: "The file has been deleted successfully.",
+          duration: 1000,
         })
       } else {
         throw new Error(response.error || "Deletion failed")
@@ -156,6 +157,7 @@ const LegalCaseAnalysis = () => {
         toast({
           title: "Queries Extracted",
           description: `Successfully extracted ${result.queries.length} queries using AI analysis.`,
+          duration: 1000,
         })
       }
       
@@ -348,6 +350,7 @@ const LegalCaseAnalysis = () => {
           toast({
             title: "Session restored",
             description: `Loaded ${formattedFiles.length} file(s) from previous session.`,
+            duration: 1000,
           })
         }
         
@@ -410,6 +413,7 @@ const LegalCaseAnalysis = () => {
           title: "Duplicate File",
           description: "This file has already been uploaded.",
           variant: "destructive",
+          duration: 1000,
         })
         continue
       }
@@ -451,6 +455,7 @@ const LegalCaseAnalysis = () => {
           toast({
             title: "Processing file",
             description: `Uploading ${file.name} and will transcribe audio...`,
+            duration: 1000,
           })
         }
 
@@ -505,12 +510,14 @@ const LegalCaseAnalysis = () => {
               toast({
                 title: "Transcription complete",
                 description: `Audio from ${file.name} has been transcribed and is ready for analysis.`,
+                duration: 1000,
               })
             } else {
               // Transcription is still in progress - keep file visible with processing indicator
               toast({
                 title: "Processing audio", 
                 description: `Transcribing ${file.name}... File will remain visible while processing.`,
+                duration: 1000,
               })
               
               // Simulate progress updates for demo purposes
@@ -534,6 +541,7 @@ const LegalCaseAnalysis = () => {
                   toast({
                     title: "Transcription complete",
                     description: `Audio from ${file.name} has been processed and is ready for analysis.`,
+                    duration: 1000,
                   })
                 } else {
                   setUploadedFiles((prev) =>
@@ -551,6 +559,7 @@ const LegalCaseAnalysis = () => {
           toast({
             title: "File uploaded",
             description: `${file.name} has been uploaded successfully.`,
+            duration: 1000,
           })
         } else {
           throw new Error(response.error || "Upload failed")
@@ -566,6 +575,7 @@ const LegalCaseAnalysis = () => {
           title: "Upload failed",
           description: `Failed to upload ${file.name}. Please try again.`,
           variant: "destructive",
+          duration: 1000,
         })
       }
     }

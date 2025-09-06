@@ -452,7 +452,7 @@ This analysis synthesizes {len(queries)} separate queries to provide a comprehen
                     {"role": "user", "content": combined_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=800
+                max_completion_tokens=800
             )
             result = response.choices[0].message.content
         

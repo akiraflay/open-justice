@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import Sidebar from "@/components/sidebar"
 import { FavoritesModal } from "@/components/favorites-modal"
+import { BottomBar } from "@/components/bottom-bar"
 import { 
   extractQueries as extractQueriesAPI, 
   uploadFile as uploadFileAPI,
@@ -28,6 +29,8 @@ import {
   ImageIcon,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Search,
   Plus,
   X,
@@ -54,8 +57,10 @@ interface Query {
     fileId: string
     fileName: string
     result: string
-    status: "pending" | "processing" | "anti-hallucination" | "completed"
+    status: "pending" | "processing" | "anti-hallucination" | "retrying" | "failed" | "completed"
     progress: number
+    message?: string
+    attempt?: string
   }>
   summary?: string
   combinedAnalysisRequested: boolean
@@ -97,6 +102,7 @@ const LegalCaseAnalysis = () => {
   const [processingSourceIds, setProcessingSourceIds] = useState<Set<string>>(new Set())
   const [favoritesModalOpen, setFavoritesModalOpen] = useState(false)
   const [isExtractingQueries, setIsExtractingQueries] = useState(false)
+  const [expandedQueries, setExpandedQueries] = useState<Set<string>>(new Set())
 
   const removeFile = async (fileId: string) => {
     try {
@@ -129,6 +135,15 @@ const LegalCaseAnalysis = () => {
       // Call the real API to extract queries using AI
       const result = await extractQueriesAPI(text)
       
+      // Check if we got real queries (not mock data)
+      if (result.queries && result.queries.length > 0) {
+        // Success toast when API returns queries
+        toast({
+          title: "Queries Extracted",
+          description: `Successfully extracted ${result.queries.length} queries using AI analysis.`,
+        })
+      }
+      
       // Map the API response to our ExtractedQuery format
       return result.queries.map((query, index) => ({
         id: Math.random().toString(36).substr(2, 9),
@@ -138,37 +153,70 @@ const LegalCaseAnalysis = () => {
     } catch (error) {
       console.error('Error extracting queries:', error)
       toast({
-        title: "Error",
-        description: "Failed to extract queries. Please try again.",
+        title: "API Connection Error",
+        description: "Failed to connect to AI service. Using fallback mode.",
         variant: "destructive",
       })
-      return []
+      
+      // Return mock queries as fallback
+      const mockQueries = [
+        "What are the key facts presented in the case?",
+        "What evidence is available or needs to be collected to support the claims or defenses in the case?",
+        "How does the liability of the parties involved in the case get determined based on the presented facts and evidence?",
+      ]
+      
+      return mockQueries.slice(0, Math.floor(Math.random() * 2) + 2).map((query, index) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        text: query,
+        questionNumber: index + 1,
+      }))
     }
   }
 
-  const ProcessingBar: React.FC<{ progress: number; status: string; message?: string; attempt?: string }> = ({ progress, status, message, attempt }) => {
+  const ProcessingBar: React.FC<{ progress: number; status: string; message?: string; attempt?: string; isRetrying?: boolean }> = ({ progress, status, message, attempt, isRetrying }) => {
     if (status === "pending") return (
       <div className="flex items-center gap-2 ml-auto">
         <span className="text-xs text-muted-foreground">Queued for analysis...</span>
       </div>
     )
     
-    if (status === "completed" && !attempt) return null
+    if (status === "completed" && !isRetrying) return null
+
+    // Determine if we're in hallucination detection/retry mode
+    const isHallucinationMode = status === "anti-hallucination" || status === "retrying" || (attempt && attempt !== "1/3")
+    
+    // For normal flow, show smooth progress (0-66% for generation, 66-100% for verification)
+    // For hallucination retries, show stepped progress with attempt counter
+    const displayProgress = isHallucinationMode ? progress : (
+      status === "verifying" ? Math.min(66 + (progress / 100 * 34), 100) : 
+      Math.min(progress * 0.66, 66)
+    )
 
     return (
       <div className="flex items-center gap-2 ml-auto">
         <div className="flex flex-col items-end">
           {message && (
-            <span className="text-xs text-muted-foreground mb-1">{message}</span>
+            <span className={`text-xs mb-1 ${isHallucinationMode ? 'text-amber-600' : 'text-muted-foreground'}`}>
+              {message}
+            </span>
           )}
           <div className="flex items-center gap-2">
-            {attempt && (
-              <span className="text-xs font-mono text-primary">{attempt}</span>
+            {isHallucinationMode && attempt && (
+              <span className="text-xs font-mono text-amber-600">{attempt}</span>
             )}
             <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary transition-all duration-300 ease-out" style={{ width: `${progress}%` }} />
+              <div 
+                className={`h-full transition-all duration-500 ease-out ${
+                  isHallucinationMode ? 'bg-amber-500' : 'bg-primary'
+                }`} 
+                style={{ width: `${displayProgress}%` }} 
+              />
             </div>
-            <span className="text-xs text-muted-foreground font-mono min-w-[32px]">{progress}%</span>
+            <span className={`text-xs font-mono min-w-[32px] ${
+              isHallucinationMode ? 'text-amber-600' : 'text-muted-foreground'
+            }`}>
+              {Math.round(displayProgress)}%
+            </span>
           </div>
         </div>
       </div>
@@ -238,6 +286,12 @@ const LegalCaseAnalysis = () => {
 
     return () => clearInterval(timer)
   }, [])
+
+  // Initialize all queries as expanded on mount
+  useEffect(() => {
+    const allQueryIds = queries.map(q => q.id)
+    setExpandedQueries(new Set(allQueryIds))
+  }, [queries])
 
   // Load session on mount
   useEffect(() => {
@@ -454,6 +508,12 @@ const LegalCaseAnalysis = () => {
     if (validQueries.length === 0 || uploadedFiles.length === 0) return
 
     const sessionId = Date.now().toString()
+    
+    // Reset UI state immediately to show normal bottom bar
+    setQueryState("input")
+    setExtractedQueries([])
+    setQueryInputs([{ id: Math.random().toString(36).substr(2, 9), text: "" }])
+    setQueryMode("auto")
 
     // Process all extracted queries in parallel
     const queryPromises = validQueries.map(async (extractedQuery) => {
@@ -486,6 +546,16 @@ const LegalCaseAnalysis = () => {
         queryText,
         // onProgress callback with enhanced status handling
         (progress, status, message, attempt) => {
+          // Show toast for hallucination detection
+          if (status === 'retrying' && message && message.includes('Low confidence')) {
+            const attemptNumber = attempt ? attempt.split('/')[0] : '1'
+            toast({
+              title: "Hallucination detected",
+              description: `Rerunning query (Attempt ${attemptNumber})`,
+              className: "bg-amber-50 border-amber-200",
+            })
+          }
+          
           setQueries((prevQueries) =>
             prevQueries.map((q) =>
               q.id === queryId
@@ -538,9 +608,6 @@ const LegalCaseAnalysis = () => {
                       progress: 100,
                       result: result.final_text || accumulatedText,
                     })),
-                    summary: result.is_verified 
-                      ? `✓ Verified with ${(result.confidence * 100).toFixed(0)}% confidence`
-                      : undefined,
                   }
                 : q,
             ),
@@ -576,11 +643,6 @@ const LegalCaseAnalysis = () => {
       title: "All queries processed",
       description: `Completed ${validQueries.length} queries with verification.`,
     })
-
-    setQueryState("input")
-    setExtractedQueries([])
-    setQueryInputs([{ id: Math.random().toString(36).substr(2, 9), text: "" }])
-    setQueryMode("auto")
   }
 
   const submitQueries = async () => {
@@ -620,6 +682,16 @@ const LegalCaseAnalysis = () => {
         queryText,
         // onProgress callback with enhanced status handling
         (progress, status, message, attempt) => {
+          // Show toast for hallucination detection
+          if (status === 'retrying' && message && message.includes('Low confidence')) {
+            const attemptNumber = attempt ? attempt.split('/')[0] : '1'
+            toast({
+              title: "Hallucination detected",
+              description: `Rerunning query (Attempt ${attemptNumber})`,
+              className: "bg-amber-50 border-amber-200",
+            })
+          }
+          
           setQueries((prevQueries) =>
             prevQueries.map((q) =>
               q.id === queryId
@@ -672,9 +744,6 @@ const LegalCaseAnalysis = () => {
                       progress: 100,
                       result: result.final_text || accumulatedText,
                     })),
-                    summary: result.is_verified 
-                      ? `✓ Verified with ${(result.confidence * 100).toFixed(0)}% confidence`
-                      : undefined,
                   }
                 : q,
             ),
@@ -926,7 +995,7 @@ const LegalCaseAnalysis = () => {
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       <Sidebar sidebarOpen={sidebarOpen} onNewChat={handleNewChat} />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col">
         <div className="h-12 flex items-center justify-between px-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <Button
@@ -945,9 +1014,8 @@ const LegalCaseAnalysis = () => {
           </Button>
         </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {uploadedFiles.length === 0 ? (
+        <div className="flex-1 flex flex-col min-h-0">
+          {uploadedFiles.length === 0 ? (
               <div className="flex-1 flex items-center justify-center p-8">
                 <Card
                   className="w-full max-w-md p-8 text-center border-dashed border-2 hover:border-primary/50 transition-colors cursor-pointer"
@@ -983,9 +1051,9 @@ const LegalCaseAnalysis = () => {
                   onChange={handleFileUpload}
                   className="hidden"
                 />
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col overflow-hidden">
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 flex flex-col">
                 {queries.length === 0 ? (
                   <div className="flex-1 flex items-start justify-center pt-16 p-8">
                     <div className="text-center max-w-md">
@@ -997,7 +1065,7 @@ const LegalCaseAnalysis = () => {
                     </div>
                   </div>
                 ) : (
-                  <ScrollArea className="flex-1">
+                  <ScrollArea className="h-full w-full">
                     <div className="max-w-4xl mx-auto space-y-4 p-3 pb-6">
                       {(() => {
                         const groupedQueries = queries.reduce(
@@ -1033,14 +1101,38 @@ const LegalCaseAnalysis = () => {
 
                             {groupedQueries[sessionId].map((query) => (
                               <div key={query.id} className="space-y-2.5 mb-4">
-                                <div className="flex items-center gap-2 mb-2">
+                                <div 
+                                  className="flex items-center gap-2 mb-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => {
+                                    const newExpanded = new Set(expandedQueries)
+                                    if (newExpanded.has(query.id)) {
+                                      newExpanded.delete(query.id)
+                                    } else {
+                                      newExpanded.add(query.id)
+                                    }
+                                    setExpandedQueries(newExpanded)
+                                  }}
+                                >
                                   <Search className="h-4 w-4 text-primary" />
-                                  <h3 className="text-sm font-semibold">{query.text}</h3>
+                                  <h3 className="text-sm font-semibold flex-1">{query.text}</h3>
+                                  {expandedQueries.has(query.id) ? (
+                                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  )}
                                 </div>
 
-                                <div className="space-y-1.5">
+                                {expandedQueries.has(query.id) && (
+                                  <div className="space-y-1.5">
                                   {query.fileResults?.map((fileResult) => (
-                                    <Card key={fileResult.fileId} className="p-2.5">
+                                    <Card 
+                                      key={fileResult.fileId} 
+                                      className={`p-2.5 transition-colors duration-300 ${
+                                        fileResult.status === "anti-hallucination" || fileResult.status === "retrying" 
+                                          ? "bg-amber-50 border-amber-200" 
+                                          : ""
+                                      }`}
+                                    >
                                       <div className="flex items-start gap-2">
                                         {getFileIcon(
                                           uploadedFiles.find((f) => f.id === fileResult.fileId)?.type || "document",
@@ -1100,12 +1192,19 @@ const LegalCaseAnalysis = () => {
                                         </div>
 
                                         <div className="flex-shrink-0">
-                                          <ProcessingBar progress={fileResult.progress} status={fileResult.status} message={fileResult.message} attempt={fileResult.attempt} />
+                                          <ProcessingBar 
+                                            progress={fileResult.progress} 
+                                            status={fileResult.status} 
+                                            message={fileResult.message} 
+                                            attempt={fileResult.attempt} 
+                                            isRetrying={fileResult.status === "retrying" || fileResult.status === "anti-hallucination"}
+                                          />
                                         </div>
                                       </div>
                                     </Card>
                                   ))}
-                                </div>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1155,12 +1254,6 @@ const LegalCaseAnalysis = () => {
 
                         if (eligibleSources.length === 0) return null
 
-                        const totalQueries = eligibleSources.reduce((sum, source) => sum + source.queries.length, 0)
-                        const totalFiles = eligibleSources.length
-
-                        // Only show combined analysis if there are multiple queries OR multiple files
-                        if (totalQueries <= 1 && totalFiles <= 1) return null
-
                         return (
                           <div className="flex flex-wrap justify-center gap-2 pt-3">
                             {eligibleSources.length > 1 && (
@@ -1193,7 +1286,7 @@ const LegalCaseAnalysis = () => {
                                   <BarChart3 className="h-3 w-3 mr-1" />
                                   {isProcessing
                                     ? "Processing..."
-                                    : `Generate Combined Analysis for ${sourceData.fileName}`}
+                                    : `Combined Analysis: ${sourceData.fileName}`}
                                 </Button>
                               )
                             })}
@@ -1203,283 +1296,44 @@ const LegalCaseAnalysis = () => {
                     </div>
                   </ScrollArea>
                 )}
-              </div>
-            )}
-
-            <div className="flex-shrink-0">
-              <div className="p-2.5">
-                <div className="max-w-4xl mx-auto">
-                      <div className="mb-1.5">
-                        <div className="flex flex-wrap gap-1">
-                          {uploadedFiles.map((file) => (
-                            <Badge
-                              key={file.id}
-                              variant="secondary"
-                              className={`flex items-center gap-1 px-1.5 py-0.5 text-xs transition-colors ${
-                                isTranscribableFile(file.type)
-                                  ? file.isTranscribing
-                                    ? "bg-slate-600/70 hover:bg-slate-600/80 text-slate-200"
-                                    : "bg-slate-500/50 hover:bg-slate-500/60 text-slate-300"
-                                  : "bg-muted/50 hover:bg-muted/70"
-                              }`}
-                            >
-                              {getFileIcon(file.type, file.isTranscribing, file.transcriptionProgress)}
-                              <span className="max-w-[80px] truncate">{file.name}</span>
-                              <span className="text-muted-foreground/70 text-xs">{file.size}</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeFile(file.id)}
-                                className="h-3 w-3 p-0 text-muted-foreground/60 hover:text-destructive ml-0.5"
-                              >
-                                <X className="h-2 w-2" />
-                              </Button>
-                            </Badge>
-                          ))}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-muted-foreground/30 rounded-md"
-                          >
-                            <Plus className="h-2.5 w-2.5 mr-0.5" />
-                            Add
-                          </Button>
-                        </div>
-                      </div>
-
-                      {queryState === "extracted" ? (
-                        <div className="bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-sm">
-                          <div className="p-3">
-                            <div className="mb-3">
-                              <h3 className="text-sm font-semibold mb-1">Extracted Questions</h3>
-                              <p className="text-xs text-muted-foreground">
-                                Review and edit the questions extracted from your input:
-                              </p>
-                            </div>
-
-                            <div className="space-y-1 mb-3">
-                              {isExtractingQueries ? (
-                                // Skeleton loading animation
-                                <>
-                                  {[1, 2, 3, 4].map((index) => (
-                                    <div key={`skeleton-${index}`} className="relative animate-pulse">
-                                      <div className="flex items-start gap-2">
-                                        <div className="text-xs text-muted-foreground/30 pt-1 min-w-0 flex-shrink-0">
-                                          Question {index}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="min-h-[40px] rounded-md bg-muted/30">
-                                            <div className="p-2 space-y-2">
-                                              <div className="h-3 bg-muted/50 rounded w-full"></div>
-                                              <div className="h-3 bg-muted/50 rounded w-4/5"></div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                        <div className="h-6 w-6 bg-muted/20 rounded"></div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </>
-                              ) : (
-                                // Actual extracted queries
-                                extractedQueries.map((query) => (
-                                  <div key={query.id} className="relative">
-                                    <div className="flex items-start gap-2">
-                                      <div className="text-xs text-muted-foreground pt-1 min-w-0 flex-shrink-0">
-                                        Question {query.questionNumber}
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <Textarea
-                                          value={query.text}
-                                          onChange={(e) => updateExtractedQuery(query.id, e.target.value)}
-                                          className="min-h-[40px] max-h-[80px] resize-none text-xs border-border/50 focus-visible:ring-1 focus-visible:ring-ring bg-background/50"
-                                          rows={2}
-                                        />
-                                      </div>
-                                      <Button
-                                        onClick={() => removeExtractedQuery(query.id)}
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 text-muted-foreground/60 hover:text-muted-foreground flex-shrink-0"
-                                      >
-                                        <X className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-
-                            <div className="flex items-center justify-between pt-2 border-t border-border">
-                              <div className="flex gap-2">
-                                <Button
-                                  onClick={addExtractedQuery}
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-xs h-7 bg-transparent"
-                                  disabled={isExtractingQueries}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  Add question
-                                </Button>
-                                <Button
-                                  onClick={() => setFavoritesModalOpen(true)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-xs h-7 bg-transparent"
-                                  disabled={isExtractingQueries}
-                                >
-                                  <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                                    />
-                                  </svg>
-                                  Add from favorites
-                                </Button>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button onClick={cancelExtraction} variant="ghost" size="sm" className="text-xs h-7">
-                                  Cancel
-                                </Button>
-                                <Button
-                                  onClick={submitExtractedQueries}
-                                  disabled={isExtractingQueries || !extractedQueries.some((q) => q.text.trim())}
-                                  className="text-xs h-7 bg-primary hover:bg-primary/90"
-                                  size="sm"
-                                >
-                                  {isExtractingQueries ? "Extracting..." : "Submit request"}
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="bg-card/95 backdrop-blur-sm border border-border rounded-xl shadow-sm">
-                          <div className="p-3">
-                            <div className="space-y-2">
-                              <ScrollArea className={queryInputs.length > 1 ? "max-h-[100px] w-full" : ""}>
-                                <div className="space-y-2 pr-2">
-                                  {queryInputs.map((input, index) => (
-                                    <div key={input.id} className="flex gap-2 items-start group">
-                                      <div className="flex-1 min-w-0 relative">
-                                        <Textarea
-                                          ref={index === 0 ? textareaRef : undefined}
-                                          value={input.text}
-                                          onChange={(e) => updateQueryInput(input.id, e.target.value)}
-                                          onKeyDown={(e) => handleKeyDown(e, input.id)}
-                                          placeholder={
-                                            index === 0
-                                              ? queryMode === "auto"
-                                                ? "Describe what you want to analyze in your case files..."
-                                                : "Ask a question about your case files..."
-                                              : `Query ${index + 1}...`
-                                          }
-                                          className={`min-h-[36px] max-h-[72px] resize-none shadow-none focus-visible:ring-1 focus-visible:ring-ring text-xs ${
-                                            queryInputs.length === 1
-                                              ? "border-0 bg-transparent p-0 placeholder:text-muted-foreground focus-visible:ring-0"
-                                              : `border border-border rounded-md bg-background p-2 ${queryInputs.length > 1 ? "pr-8" : ""}`
-                                          }`}
-                                          rows={1}
-                                        />
-                                        {queryInputs.length > 1 && (
-                                          <Button
-                                            onClick={() => removeQueryInput(input.id)}
-                                            variant="ghost"
-                                            size="sm"
-                                            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-5 w-5 p-0 text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/80 opacity-70 group-hover:opacity-100 transition-all duration-200"
-                                          >
-                                            <X className="h-2.5 w-2.5" />
-                                          </Button>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                                        {index === 0 && queryInputs.length === 1 && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={handleVoiceInput}
-                                            disabled={recordingState === "processing"}
-                                            className={`h-7 w-7 p-0 transition-all duration-300 ease-in-out ${
-                                              recordingState === "recording"
-                                                ? "text-red-500 bg-red-50/50 hover:bg-red-100/50 scale-105"
-                                                : recordingState === "processing"
-                                                  ? "text-blue-500 bg-blue-50/50"
-                                                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50 hover:scale-105"
-                                            }`}
-                                            title={
-                                              recordingState === "recording"
-                                                ? "Click to stop recording"
-                                                : recordingState === "processing"
-                                                  ? "Processing voice input..."
-                                                  : "Click to start voice input"
-                                            }
-                                          >
-                                            {recordingState === "processing" ? (
-                                              <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                            ) : (
-                                              <Mic
-                                                className={`h-3.5 w-3.5 transition-transform duration-200 ${
-                                                  recordingState === "recording" ? "animate-pulse scale-110" : ""
-                                                }`}
-                                              />
-                                            )}
-                                          </Button>
-                                        )}
-                                        {((queryInputs.length === 1 && index === 0) ||
-                                          (queryInputs.length > 1 && index === queryInputs.length - 1)) && (
-                                          <Button
-                                            onClick={() => handleSubmitQuery()}
-                                            disabled={!queryInputs.some((input) => input.text.trim())}
-                                            className="h-8 px-3 bg-white hover:bg-gray-50 text-black border border-gray-300 shadow-sm text-xs"
-                                            size="sm"
-                                          >
-                                            <Send className="h-3.5 w-3.5 stroke-black" />
-                                          </Button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </ScrollArea>
-                            </div>
-
-                            <div className="mt-1.5 pt-1.5 border-t border-border">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  onClick={() => setQueryMode(queryMode === "auto" ? "manual" : "auto")}
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-5 px-2 text-xs bg-transparent border-muted-foreground/30 hover:bg-muted/50"
-                                >
-                                  {queryMode === "auto" ? "Auto" : "Manual"}
-                                </Button>
-                                <p className="text-xs text-muted-foreground">
-                                  {queryMode === "auto"
-                                    ? "Press Enter to submit, Shift + Enter for manual mode"
-                                    : "Press Shift + Enter for new query, Enter to submit"}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                </div>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,audio/*,video/*,image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </div>
             </div>
-          </div>
+          )}
+
+          <BottomBar
+            uploadedFiles={uploadedFiles}
+            queryState={queryState}
+            queryInputs={queryInputs}
+            extractedQueries={extractedQueries}
+            queryMode={queryMode}
+            isExtractingQueries={isExtractingQueries}
+            recordingState={recordingState}
+            fileInputRef={fileInputRef}
+            textareaRef={textareaRef}
+            favoritesModalOpen={favoritesModalOpen}
+            onRemoveFile={removeFile}
+            onAddFile={() => fileInputRef.current?.click()}
+            onUpdateQueryInput={updateQueryInput}
+            onRemoveQueryInput={removeQueryInput}
+            onUpdateExtractedQuery={updateExtractedQuery}
+            onRemoveExtractedQuery={removeExtractedQuery}
+            onAddExtractedQuery={addExtractedQuery}
+            onSubmitQuery={handleSubmitQuery}
+            onSubmitExtractedQueries={submitExtractedQueries}
+            onCancelExtraction={cancelExtraction}
+            onKeyDown={handleKeyDown}
+            onSetQueryMode={setQueryMode}
+            onSetFavoritesModalOpen={setFavoritesModalOpen}
+            onVoiceInput={handleVoiceInput}
+          />
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,audio/*,video/*,image/*"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
         </div>
       </div>
       <FavoritesModal

@@ -96,7 +96,7 @@ class QueryEngine:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=500
+                max_completion_tokens=500
             )
             
             result = json.loads(response.choices[0].message.content)
@@ -165,7 +165,7 @@ class QueryEngine:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=500
+                max_completion_tokens=500
             )
             
             return response.choices[0].message.content
@@ -205,7 +205,7 @@ class QueryEngine:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.3,
-                max_tokens=500,
+                max_completion_tokens=500,
                 stream=True  # Enable streaming
             )
             
@@ -248,7 +248,7 @@ class QueryEngine:
                     {"role": "user", "content": verification_prompt}
                 ],
                 temperature=0.1,  # Low temperature for consistency
-                max_tokens=300
+                max_completion_tokens=300
             )
             
             result = json.loads(response_obj.choices[0].message.content)

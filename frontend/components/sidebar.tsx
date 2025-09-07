@@ -271,10 +271,10 @@ export default function Sidebar({ sidebarOpen, onNewChat }: SidebarProps) {
           {sidebarOpen ? (
             <div className="flex items-center gap-3 w-full">
               <div className="h-6 w-6 rounded-full bg-transparent flex items-center justify-center text-sidebar-foreground/60 text-xs font-medium flex-shrink-0">
-                SL
+                ND
               </div>
               <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs font-medium text-sidebar-foreground/80 leading-tight">Stefanie Lindquist</p>
+                <p className="text-xs font-medium text-sidebar-foreground/80 leading-tight">Nalini D'Souza</p>
                 <p className="text-xs text-sidebar-foreground/50 leading-tight">WashULaw</p>
               </div>
               <ChevronDown

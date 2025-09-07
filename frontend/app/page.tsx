@@ -289,7 +289,7 @@ const LegalCaseAnalysis = () => {
   }
 
   useEffect(() => {
-    const text = "Welcome to OpenJustice, Counselor Lindquist"
+    const text = "Welcome to OpenJustice, Counselor D'Souza"
     let index = 0
 
     const timer = setInterval(() => {
